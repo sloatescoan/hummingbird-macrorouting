@@ -57,22 +57,7 @@ public struct RoutingMacro: ExtensionMacro {
         }
 
         // this is kind of ugly, but it works…
-        var code = ""
-        
-        code += """
-            struct $Routing {
-        """
-        for route in routes {
-            code += """
-                let \(route.handler): StaticRouteDefinition
-            """
-        }
-        code += """
-            }
-
-        """
-        
-        code += """
+        var code = """
             var $routes: RouteCollectionContainer<Context> {
                 let routes = RouteCollection(context: Context.self)
         """
@@ -90,28 +75,38 @@ public struct RoutingMacro: ExtensionMacro {
             }
         """
 
-        // code += """
-        //     static var $routing: $Routing {
-        //         $Routing(
-        // """
-        // var first = true
-        // for route in routes {
-        //     if first {
-        //         first = false
-        //     } else {
-        //         code += ","
-        //     }
-        //     code += """
-        //         \(route.handler): StaticRouteDefinition(
-        //             path: "\(route.path)",
-        //             method: .\(route.method.rawValue.lowercased())
-        //         )
-        //     """
-        // }
-        // code += """
-        //         )
-        //     }
-        // """
+        code += "public enum $Routing: Equatable, CaseIterable {\n"
+        for route in routes {
+            code += "    case \(route.handler)\n"
+        }
+        code += """
+            var method: HTTPRequest.Method {
+                switch self {
+        """
+        for route in routes {
+            code += """
+                case .\(route.handler):
+                    return .\(route.method.rawValue.lowercased())
+            """
+        }
+        code += """
+                }
+            }
+
+            var path: String {
+                switch self {
+        """
+        for route in routes {
+            code += """
+                case .\(route.handler):
+                    return "\(route.path)"
+            """
+        }
+        code += """
+                }
+            }
+        }
+        """
 
         let extensionCode = """
         extension \(type) {

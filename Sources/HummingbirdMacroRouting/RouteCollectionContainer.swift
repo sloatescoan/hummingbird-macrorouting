@@ -2,7 +2,6 @@ import Hummingbird
 
 // this container (and the RouterMethods extension) is to compiler-hint
 // that atPath is unavailable for this type of routing
-// This RouterMethods.addRoutes(RouteCollectionContainer) is what you want instead of the one with atPath.
 public struct RouteCollectionContainer<Context: RequestContext> {
     public let routeCollection: RouteCollection<Context>
 
