@@ -66,7 +66,7 @@ public struct RoutingMacro: ExtensionMacro {
                 _ = routes.on(
                     "\(route.path)",
                     method: .\(route.method.rawValue.lowercased()),
-                    responder: CallbackResponder(callback: \(route.handler))
+                    use: \(route.handler)
                 )
             """
         }
