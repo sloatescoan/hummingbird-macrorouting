@@ -28,9 +28,18 @@ let package = Package(
             dependencies: [
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
-                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax")
             ],
             path: "Sources/RoutingMacros"
         ),
+        .testTarget(
+            name: "HummingbirdMacroRoutingTests",
+            dependencies: [
+                .byName(name: "HummingbirdMacroRouting"),
+                .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "HummingbirdTesting", package: "hummingbird")
+            ],
+            path: "Tests"
+        )
     ]
 )
