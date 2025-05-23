@@ -4,7 +4,7 @@ import HummingbirdMacroRouting
 import HummingbirdTesting
 
 @Suite("Simple Macro Routing Tests")
-struct SimpleMacroRoutingTests {
+struct MacroRoutingTestSimple {
     typealias Context = SimpleMacroRoutingRequestContext
     typealias Controller = SimpleMacroRoutingController
 
@@ -15,6 +15,8 @@ struct SimpleMacroRoutingTests {
 
         #expect(Controller.$Routing.logOutHandler.method == .post)
         #expect(Controller.$Routing.logOutHandler.path == "/logout")
+
+        #expect(Controller.$Routing.prefix == nil)
     }
 
     @Test("Instance Structure")
