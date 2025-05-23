@@ -1,5 +1,5 @@
 @attached(extension, names: arbitrary)
-public macro MacroRouting() = #externalMacro(module: "RoutingMacros", type: "RoutingMacro")
+public macro MacroRouting(prefix: String? = nil) = #externalMacro(module: "RoutingMacros", type: "RoutingMacro")
 
 @attached(peer, names: arbitrary)
 public macro GET(_ path: String) = #externalMacro(module: "RoutingMacros", type: "GETMacro")

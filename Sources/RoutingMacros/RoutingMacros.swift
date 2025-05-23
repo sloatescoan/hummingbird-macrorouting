@@ -31,7 +31,18 @@ public struct RoutingMacro: ExtensionMacro {
     ) throws -> [SwiftSyntax.ExtensionDeclSyntax] {
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
             return []
-        }        
+        }
+
+        let prefix: String?
+        if let prefixArg = node.arguments?.as(LabeledExprListSyntax.self)?.first {
+            if let stringLiteral = prefixArg.expression.as(StringLiteralExprSyntax.self) {
+                prefix = stringLiteral.segments.first?.as(StringSegmentSyntax.self)?.content.text
+            } else {
+                prefix = nil
+            }
+        } else {
+            prefix = nil
+        }
 
         let routes: [(method: Method, path: String, handler: String)] = structDecl.memberBlock.members.compactMap { member in
             guard let function = member.decl.as(FunctionDeclSyntax.self) else { return nil }
@@ -64,7 +75,7 @@ public struct RoutingMacro: ExtensionMacro {
         for route in routes {
             code += """
                 _ = routes.on(
-                    "\(route.path)",
+                    "\(prefix ?? "")\(route.path)",
                     method: .\(route.method.rawValue.lowercased()),
                     use: \(route.handler)
                 )
@@ -76,6 +87,15 @@ public struct RoutingMacro: ExtensionMacro {
         """
 
         code += "public enum $Routing: Equatable, CaseIterable {\n"
+
+        code += "    public static let prefix: String? = "
+        if let prefix {
+            code += "\"\(prefix)\""
+        } else {
+            code += "nil"
+        }
+        code += "\n\n"
+
         for route in routes {
             code += "    case \(route.handler)\n"
         }
@@ -92,8 +112,24 @@ public struct RoutingMacro: ExtensionMacro {
         code += """
                 }
             }
-
+        """
+        code += """
             var path: String {
+                switch self {
+        """
+        for route in routes {
+            code += """
+                case .\(route.handler):
+                    return "\(prefix ?? "")\(route.path)"
+            """
+        }
+        code += """
+                }
+            }
+        """
+
+        code += """
+            var rawPath: String {
                 switch self {
         """
         for route in routes {
@@ -105,6 +141,9 @@ public struct RoutingMacro: ExtensionMacro {
         code += """
                 }
             }
+        """
+
+        code += """
         }
         """
 
