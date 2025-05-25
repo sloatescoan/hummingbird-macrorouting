@@ -3,6 +3,7 @@ import SwiftCompilerPlugin
 import SwiftSyntaxMacros
 import SwiftSyntax
 import SwiftDiagnostics
+import Hummingbird
 
 @main
 struct RoutingMacros: CompilerPlugin {
@@ -86,66 +87,62 @@ public struct RoutingMacro: ExtensionMacro {
             }
         """
 
-        code += "public enum $Routing: Equatable, CaseIterable {\n"
-
-        code += "    public static let prefix: String? = "
-        if let prefix {
-            code += "\"\(prefix)\""
-        } else {
-            code += "nil"
-        }
-        code += "\n\n"
-
-        for route in routes {
-            code += "    case \(route.handler)\n"
-        }
         code += """
-            var method: HTTPRequest.Method {
-                switch self {
+            struct $Routing {
+                private init() {}
+                static let $all: [any MacroRoutingRoute.Type] = [
+                    \(routes.map({ $0.handler + ".self" }).joined(separator: ", "))
+                ]
+                static let prefix: String? = \(prefix == nil ? "nil" : "\"\(prefix!)\"")
         """
+
         for route in routes {
-            code += """
-                case .\(route.handler):
-                    return .\(route.method.rawValue.lowercased())
-            """
-        }
-        code += """
+            var captured: [String] = []
+            var out: [String] = []
+
+            let prefixedPath = "\(prefix ?? "")\(route.path)"
+
+            let rp = RouterPath(route.path)
+            for element in rp.components {
+                let component = element.description
+                if component.first == "{" {
+                    let name = String(component.dropFirst().dropLast())
+                    captured.append(name)
+                    out.append("\\(" + name + ")")
+                } else if component.first == ":" {
+                    let name = String(component.dropFirst())
+                    captured.append(name)
+                    out.append("\\(" + name + ")")
+                } else {
+                    // there are other types like wildcards, but those are harder to replace
+                    out.append(component.description)
                 }
             }
-        """
-        code += """
-            var path: String {
-                switch self {
-        """
-        for route in routes {
+
             code += """
-                case .\(route.handler):
-                    return "\(prefix ?? "")\(route.path)"
+                struct \(route.handler): MacroRoutingRoute {
+                    private init() {}
+                    static let method: HTTPRequest.Method = .\(route.method.rawValue.lowercased())
+                    static let path: String = "\(prefixedPath)"
+                    static let rawPath: String = "\(route.path)"
+            """
+
+            if captured.count > 0 {
+                code += """
+                    static func resolvedPath(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
+                        "/\(out.joined(separator: "/"))"
+                    }
+                """
+            }
+
+            code += """
+                }
             """
         }
-        code += """
-                }
-            }
-        """
 
         code += """
-            var rawPath: String {
-                switch self {
-        """
-        for route in routes {
-            code += """
-                case .\(route.handler):
-                    return "\(route.path)"
-            """
-        }
-        code += """
-                }
             }
-        """
-
-        code += """
-        }
-        """
+        """ // end struct $Routing
 
         let extensionCode = """
         extension \(type) {
