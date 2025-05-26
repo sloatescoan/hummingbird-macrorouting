@@ -8,7 +8,7 @@ struct MacroRoutingTestTricky {
     typealias Context = SimpleMacroRoutingRequestContext
     typealias Controller = TrickyMacroRoutingController
 
-    @Test("Structure")
+    @Test("Reserved Words Structure")
     func testStructure() {
         #expect(Controller.$Routing.do.method == .get)
         #expect(Controller.$Routing.do.path == "/do")
