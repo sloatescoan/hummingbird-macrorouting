@@ -34,7 +34,7 @@ struct MacroRoutingTestPathArguments {
             ) == "/movie/ratatouille/2007"
         )
 
-        #expect(Controller.$Routing.other.path == "/mixed/{one}/{two}/{three}/{four}/{five}")
+        #expect(Controller.$Routing.other.path == "/other/{one}/{two}/{three}/{four}/{five}")
         #expect(
             Controller.$Routing.other.resolvedPath(
                 one: "apple", two: "banana", three: "carrot",
