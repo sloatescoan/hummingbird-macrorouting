@@ -17,6 +17,14 @@ struct MacroRoutingTestSimple {
         #expect(Controller.$Routing.logOutHandler.path == "/logout")
 
         #expect(Controller.$Routing.prefix == nil)
+
+        // digging into paths in $all is easier than comparing the structs directly
+        #expect(
+            Controller.$Routing.$all.map({ $0.path }) == [
+                Controller.$Routing.logIn.path,
+                Controller.$Routing.logOutHandler.path
+            ]
+        )
     }
 
     @Test("Instance Structure")
