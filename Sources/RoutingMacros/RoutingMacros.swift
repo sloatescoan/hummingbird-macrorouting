@@ -108,11 +108,11 @@ public struct RoutingMacro: ExtensionMacro {
                 if component.first == "{" {
                     let name = String(component.dropFirst().dropLast())
                     captured.append(name)
-                    out.append("\\(" + name + ")")
+                    out.append("\\(`" + name + "`)")
                 } else if component.first == ":" {
                     let name = String(component.dropFirst())
                     captured.append(name)
-                    out.append("\\(" + name + ")")
+                    out.append("\\(`" + name + "`)")
                 } else {
                     // there are other types like wildcards, but those are harder to replace
                     out.append(component.description)
