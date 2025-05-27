@@ -26,6 +26,7 @@ let package = Package(
         .macro(
             name: "RoutingMacros",
             dependencies: [
+                .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax")
