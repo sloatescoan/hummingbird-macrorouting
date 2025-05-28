@@ -94,7 +94,7 @@ The main benefits to this approach are:
 - less boilerplate (no need to compose a bespoke `var routes: RouteCollection<Context>`)
 - a direct relationship/link between your route functions and the `@VERB("/path")` annotations (no need to look elsewhere in the file to track down the logic in `.routes`)
 - route lookup with `Controller.$Routing.routeName` where `routeName` is the function name (or declared route name)
-  - If you have a `@MacroRouting` controller, a `$Routing` property is synthesized (this is a controller-specific `enum` type, which includes `.path` and `.method` for each case), so you can look up routes progrmamatically, and at compile time (so you also get code completion, and you can change route paths by changing the value in `@GET("/login")`, seamlessly, if you don't change the name of `AuthController.logIn`, and you'll get help from the compiler if you *do* rename the `logIn` function.
+  - If you have a `@MacroRouting` controller, a `$Routing` property is synthesized (this is a controller-specific struct, which includes routing info for each of your declared routes), so you can look up routes progrmamatically, and at compile time (so you also get code completion, and you can change route paths by changing the value in `@GET("/login")`, seamlessly, if you don't change the name of `AuthController.logIn`, and you'll get help from the compiler if you *do* rename the `logIn` function.
 - you can still use the normal routing methods, including the documented [`RouteCollection`](https://docs.hummingbird.codes/2.0/documentation/hummingbird/routerguide#Route-Collections) + `addRoutes(…)` based approach
   - `hummingbird-macroroutes` provides a `RouteCollectionContainer` that wraps these to help hint that you shouldn't use the `atPath` signature (see below)
   - a `.$routes` var is synthesized on the controller to contain this `RouteCollectionContainer`
@@ -105,7 +105,7 @@ The main benefits to this approach are:
 In your `Package.swift`, put this into your `.dependencies`:
 
 ```swift
-    .package(url: "https://github.com/sloatescoan/hummingbird-macrorouting.git", from: "0.1.0")
+    .package(url: "https://github.com/sloatescoan/hummingbird-macrorouting.git", from: "0.2.0")
 ```
 
 …and in your `.target`/`.executableTarget`:
