@@ -37,12 +37,40 @@ struct MsgNameConflict: DiagnosticMessage {
     }
 }
 
+struct MsgNameError: DiagnosticMessage {
+    let diagnosticID = MessageID(domain: "MacroRouting", id: "nameError")
+    let severity: DiagnosticSeverity = .error
+    let message: String
+    init(name: String) {
+        self.message = "The name associated with this route ('\(name)') must be a valid Swift identifier"
+    }
+}
+
 struct CapturedRoute {
     let method: Method
     let path: String
     let handler: String
     let name: String
     let function: FunctionDeclSyntax
+
+    static func stripped(_ val: String) -> String {
+        var val = val
+        if val.first == "`" {
+            val = String(val.dropFirst())
+        }
+        if val.last == "`" {
+            val = String(val.dropLast())
+        }
+        return val
+    }
+
+    init(method: Method, path: String, handler: String, name: String, function: FunctionDeclSyntax) {
+        self.method = method
+        self.path = Self.stripped(path)
+        self.handler = Self.stripped(handler)
+        self.name = Self.stripped(name)
+        self.function = function
+    }
 }
 
 public struct RoutingMacro: ExtensionMacro {
@@ -104,10 +132,21 @@ public struct RoutingMacro: ExtensionMacro {
                     let nameExpr = arguments.first(where: { $0.label?.text == "name" })?.expression.as(StringLiteralExprSyntax.self),
                     let nameValue = nameExpr.segments.first?.as(StringSegmentSyntax.self)?.content.text
                 {
+                    let isValid = nameValue.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil
+                    guard isValid else {
+                        context.diagnose(
+                            Diagnostic(
+                                node: member.decl,
+                                message: MsgNameError(name: nameValue)
+                            )
+                        )
+                        return nil
+                    }
                     name = nameValue
                 } else {
                     name = function.name.text
                 }
+
 
                 return CapturedRoute(method: method, path: path, handler: function.name.text, name: name, function: function)
             }
@@ -138,7 +177,7 @@ public struct RoutingMacro: ExtensionMacro {
                 _ = routes.on(
                     "\(prefix ?? "")\(route.path)",
                     method: .\(route.method.rawValue.lowercased()),
-                    use: \(route.handler)
+                    use: `\(route.handler)`
                 )
             """
         }
@@ -151,7 +190,7 @@ public struct RoutingMacro: ExtensionMacro {
             struct $Routing {
                 private init() {}
                 static let $all: [any MacroRoutingRoute.Type] = [
-                    \(routes.map({ $0.name + ".self" }).joined(separator: ", "))
+                    \(routes.map({ "`" + $0.name + "`" + ".self" }).joined(separator: ", "))
                 ]
                 static let prefix: String? = \(prefix == nil ? "nil" : "\"\(prefix!)\"")
         """
@@ -180,7 +219,7 @@ public struct RoutingMacro: ExtensionMacro {
             }
 
             code += """
-                struct \(route.name): MacroRoutingRoute {
+                struct `\(route.name)`: MacroRoutingRoute {
                     private init() {}
                     static let method: HTTPRequest.Method = .\(route.method.rawValue.lowercased())
                     static let path: String = "\(prefixedPath)"

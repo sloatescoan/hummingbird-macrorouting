@@ -11,7 +11,7 @@ struct NameMacroRoutingController {
     }
 
     @GET("/welcome2")
-    @Sendable func welcomeRouteHandler2(request: Request, context: Context) async throws -> Response {
+    @Sendable func `welcomeRouteHandler2`(request: Request, context: Context) async throws -> Response {
         return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "Welcome 2!")))
     }
 
@@ -19,5 +19,10 @@ struct NameMacroRoutingController {
     @POST("/welcome3", name: "postWelcomeRouteHandler3")
     @Sendable func welcomeRouteHandler3(request: Request, context: Context) async throws -> Response {
         return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "Welcome 3!")))
+    }
+
+    @GET("/welcome4", name: "func")
+    @Sendable func welcomeRouteHandler4(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "Welcome 4!")))
     }
 }
