@@ -199,3 +199,11 @@ The argument names are synthesized by the HummingbirdMacroRouting, so they're av
 ## Tests
 
 There's some useful reference code available in the [test suite](https://github.com/sloatescoan/hummingbird-macrorouting/tree/main/Tests).
+
+## Limitations
+
+MacroRouting runs—as the name implies—as a Swift macro, which means that it is part of the compile phase. This means that it can't "know" about routing that is applied at runtime.
+
+It operates statically, to synthesize the `$Routing` struct.
+
+You can still apply routes with `atPath`, or as [`RouterGroup`](https://docs.hummingbird.codes/2.0/documentation/hummingbird/routergroup) methods, but you won't benefit from MacroRouting's synthesis.
