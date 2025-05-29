@@ -105,7 +105,7 @@ The main benefits to this approach are:
 In your `Package.swift`, put this into your `.dependencies`:
 
 ```swift
-    .package(url: "https://github.com/sloatescoan/hummingbird-macrorouting.git", from: "0.2.0")
+    .package(url: "https://github.com/sloatescoan/hummingbird-macrorouting.git", from: "0.2.1")
 ```
 
 …and in your `.target`/`.executableTarget`:
