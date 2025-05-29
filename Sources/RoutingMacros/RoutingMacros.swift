@@ -22,6 +22,33 @@ enum Method: String, CaseIterable {
     static var allValues: [String] { Self.allCases.map { "\($0)".uppercased() } }
 }
 
+struct CapturedRoute {
+    let method: Method
+    let path: String
+    let handler: String
+    let name: String
+    let function: FunctionDeclSyntax
+
+    static func stripped(_ val: String) -> String {
+        var val = val
+        if val.first == "`" {
+            val = String(val.dropFirst())
+        }
+        if val.last == "`" {
+            val = String(val.dropLast())
+        }
+        return val
+    }
+
+    init(method: Method, path: String, handler: String, name: String, function: FunctionDeclSyntax) {
+        self.method = method
+        self.path = Self.stripped(path)
+        self.handler = Self.stripped(handler)
+        self.name = Self.stripped(name)
+        self.function = function
+    }
+}
+
 public struct RoutingMacro: ExtensionMacro {
     public static func expansion(
         of node: SwiftSyntax.AttributeSyntax,
@@ -45,27 +72,75 @@ public struct RoutingMacro: ExtensionMacro {
             prefix = nil
         }
 
-        let routes: [(method: Method, path: String, handler: String)] = structDecl.memberBlock.members.compactMap { member in
-            guard let function = member.decl.as(FunctionDeclSyntax.self) else { return nil }
-            
-            // Find HTTP method attributes (@GET, @POST, etc.)
-            let httpAttribute = function.attributes.first { attr in
-                let attrName = attr.as(AttributeSyntax.self)?.attributeName.as(IdentifierTypeSyntax.self)?.name.text ?? ""
+        let routes: [CapturedRoute] = structDecl.memberBlock.members.flatMap { member -> [CapturedRoute] in
+            guard let function = member.decl.as(FunctionDeclSyntax.self) else { return [] }
+
+            // Find all HTTP method attributes (@GET, @POST, etc.)
+            let httpAttributes = function.attributes.compactMap { attr in
+                attr.as(AttributeSyntax.self)
+            }.filter { attr in
+                let attrName = attr.attributeName.as(IdentifierTypeSyntax.self)?.name.text ?? ""
                 return Method.allValues.contains(attrName)
-            }?.as(AttributeSyntax.self)
-            
-            // guard against malformed macro placement, etc.
-            guard
-                let httpAttribute = httpAttribute,
-                let arguments = httpAttribute.arguments?.as(LabeledExprListSyntax.self),
-                let firstArg = arguments.first?.expression.as(StringLiteralExprSyntax.self),
-                let methodName = httpAttribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text,
-                let method = Method(rawValue: methodName.lowercased()),
-                let path = firstArg.segments.first?.as(StringSegmentSyntax.self)?.content.text
-            else {
-                return nil
             }
-            return (method: method, path: path, handler: function.name.text)
+
+            // this second compactMap is because we might have multiple @VERB attachments for one function
+            return httpAttributes.compactMap { httpAttribute in
+                // Extract method, path, and name for each attribute
+                guard
+                    let arguments = httpAttribute.arguments?.as(LabeledExprListSyntax.self),
+                    let firstArg = arguments.first?.expression.as(StringLiteralExprSyntax.self),
+                    let methodName = httpAttribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text,
+                    let method = Method(rawValue: methodName.lowercased()),
+                    let path = firstArg.segments.first?.as(StringSegmentSyntax.self)?.content.text
+                else {
+                    context.diagnose(
+                        Diagnostic(
+                            node: member.decl,
+                            message: MsgMalformed()
+                        )
+                    )
+                    return nil
+                }
+
+                // Extract the route name
+                let name: String
+                if
+                    let nameExpr = arguments.first(where: { $0.label?.text == "name" })?.expression.as(StringLiteralExprSyntax.self),
+                    let nameValue = nameExpr.segments.first?.as(StringSegmentSyntax.self)?.content.text
+                {
+                    let isValid = nameValue.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil
+                    guard isValid else {
+                        context.diagnose(
+                            Diagnostic(
+                                node: member.decl,
+                                message: MsgNameError(name: nameValue)
+                            )
+                        )
+                        return nil
+                    }
+                    name = nameValue
+                } else {
+                    name = function.name.text
+                }
+
+
+                return CapturedRoute(method: method, path: path, handler: function.name.text, name: name, function: function)
+            }
+        }
+
+        // make sure we don't have more than one route with the same name:
+        var routeNames: Set<String> = []
+        for route in routes {
+            if routeNames.contains(route.name) {
+                context.diagnose(
+                    Diagnostic(
+                        node: route.function,
+                        message: MsgNameConflict(name: route.name)
+                    )
+                )
+            } else {
+                routeNames.insert(route.name)
+            }
         }
 
         // this is kind of ugly, but it works…
@@ -78,7 +153,7 @@ public struct RoutingMacro: ExtensionMacro {
                 _ = routes.on(
                     "\(prefix ?? "")\(route.path)",
                     method: .\(route.method.rawValue.lowercased()),
-                    use: \(route.handler)
+                    use: `\(route.handler)`
                 )
             """
         }
@@ -91,7 +166,7 @@ public struct RoutingMacro: ExtensionMacro {
             struct $Routing {
                 private init() {}
                 static let $all: [any MacroRoutingRoute.Type] = [
-                    \(routes.map({ $0.handler + ".self" }).joined(separator: ", "))
+                    \(routes.map({ "`" + $0.name + "`" + ".self" }).joined(separator: ", "))
                 ]
                 static let prefix: String? = \(prefix == nil ? "nil" : "\"\(prefix!)\"")
         """
@@ -120,11 +195,13 @@ public struct RoutingMacro: ExtensionMacro {
             }
 
             code += """
-                struct \(route.handler): MacroRoutingRoute {
+                struct `\(route.name)`: MacroRoutingRoute {
                     private init() {}
                     static let method: HTTPRequest.Method = .\(route.method.rawValue.lowercased())
                     static let path: String = "\(prefixedPath)"
                     static let rawPath: String = "\(route.path)"
+                    static let handler: String = "\(route.handler)"
+                    static let name: String = "\(route.name)"
             """
 
             if captured.count > 0 {
