@@ -3,7 +3,6 @@ import SwiftCompilerPlugin
 import SwiftSyntaxMacros
 import SwiftSyntax
 import SwiftDiagnostics
-import Hummingbird
 
 @main
 struct RoutingMacros: CompilerPlugin {
@@ -177,9 +176,7 @@ public struct RoutingMacro: ExtensionMacro {
 
             let prefixedPath = "\(prefix ?? "")\(route.path)"
 
-            let rp = RouterPath(route.path)
-            for element in rp.components {
-                let component = element.description
+            for component in route.path.split(separator: "/") {
                 if component.first == "{" {
                     let name = String(component.dropFirst().dropLast())
                     captured.append(name)
