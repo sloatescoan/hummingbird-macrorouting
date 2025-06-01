@@ -46,4 +46,10 @@ struct MacroRoutingTestPrefix {
             }
         }
     }
+
+    @Test("Resolved Path")
+    func testPathResolution() async throws {
+        #expect(Controller.$Routing.auth.path == "/api/auth")
+        #expect(Controller.$Routing.deauthId.resolvedPath(id: "test") == "/api/deauth/test")
+    }
 }

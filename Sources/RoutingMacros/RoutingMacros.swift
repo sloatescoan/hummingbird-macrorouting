@@ -176,7 +176,7 @@ public struct RoutingMacro: ExtensionMacro {
 
             let prefixedPath = "\(prefix ?? "")\(route.path)"
 
-            for component in route.path.split(separator: "/") {
+            for component in prefixedPath.split(separator: "/") {
                 if component.first == "{" {
                     let name = String(component.dropFirst().dropLast())
                     captured.append(name)
