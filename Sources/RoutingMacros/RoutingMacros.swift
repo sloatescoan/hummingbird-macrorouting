@@ -195,17 +195,24 @@ public struct RoutingMacro: ExtensionMacro {
                 struct `\(route.name)`: MacroRoutingRoute {
                     private init() {}
                     static let method: HTTPRequest.Method = .\(route.method.rawValue.lowercased())
-                    static let path: String = "\(prefixedPath)"
                     static let rawPath: String = "\(route.path)"
                     static let handler: String = "\(route.handler)"
                     static let name: String = "\(route.name)"
             """
 
             if captured.count > 0 {
+                // for routes that have captured arguments, mark path as deprecated, and provide resolvedPath
                 code += """
+                    @available(*, deprecated, renamed: "rawPath", message: "path will be removed for routes that have captured arguments; you probably want resolvedPath(…)")
+                    static let path: String = "\(prefixedPath)"
                     static func resolvedPath(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
                         "/\(out.joined(separator: "/"))"
                     }
+                """
+            } else {
+                // this is for routes *without* captured arguments
+                code += """
+                    static let path: String = "\(prefixedPath)"
                 """
             }
 
