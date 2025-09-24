@@ -1,6 +1,6 @@
 import Hummingbird
 
-public protocol MacroRoutingRoute {
+public protocol MacroRoutingRoute: Sendable {
     static var method: HTTPRequest.Method {get}
     static var path: String {get}
     static var rawPath: String {get}
