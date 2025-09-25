@@ -96,7 +96,7 @@ The main benefits to this approach are:
 - route lookup with `Controller.$Routing.routeName` where `routeName` is the function name (or declared route name)
   - If you have a `@MacroRouting` controller, a `$Routing` property is synthesized (this is a controller-specific struct, which includes routing info for each of your declared routes), so you can look up routes progrmamatically, and at compile time (so you also get code completion, and you can change route paths by changing the value in `@GET("/login")`, seamlessly, if you don't change the name of `AuthController.logIn`, and you'll get help from the compiler if you *do* rename the `logIn` function.
 - you can still use the normal routing methods, including the documented [`RouteCollection`](https://docs.hummingbird.codes/2.0/documentation/hummingbird/routerguide#Route-Collections) + `addRoutes(…)` based approach
-  - `hummingbird-macroroutes` provides a `RouteCollectionContainer` that wraps these to help hint that you shouldn't use the `atPath` signature (see below)
+  - `hummingbird-MacroRouting` provides a `RouteCollectionContainer` that wraps these to help hint that you shouldn't use the `atPath` signature (see below)
   - a `.$routes` var is synthesized on the controller to contain this `RouteCollectionContainer`
 - you can construct route paths based on path arguments, all statically, so if anything changes, the compiler will warn you
 
@@ -105,7 +105,7 @@ The main benefits to this approach are:
 In your `Package.swift`, put this into your `.dependencies`:
 
 ```swift
-    .package(url: "https://github.com/sloatescoan/hummingbird-macrorouting.git", from: "0.2.1")
+    .package(url: "https://github.com/sloatescoan/hummingbird-macrorouting.git", from: "0.3.0")
 ```
 
 …and in your `.target`/`.executableTarget`:
@@ -182,19 +182,19 @@ Additionally, route paths with arguments can be resolved through the synthesized
     }
 ```
 
-Where you might normally get the logs path with `ApiController.$Routing.logs.path`, here, the path has arguments. `.path` would return `/api/logs/{userId}/{timing}`, which isn't exactly useful for passing to a client if you want them to fetch "my logs for today", for example.
+Where you might normally get the logs path with `ApiController.$Routing.logs.path`, here, the path has arguments. If MacroRouting were to supply `.path` as a `String`, it would return `/api/logs/{userId}/{timing}`, which isn't exactly useful for passing to a client if you want them to fetch "my logs for today", for example.
 
-This is where `.resolvedPath` comes in:
+This is where `.path()` comes in:
 
 ```swift
-let logsPath = ApiController.$Routing.logs.resolvedPath(userId: "123", timing: "2025-05-27")
+let logsPath = ApiController.$Routing.logs.path(userId: "123", timing: "2025-05-27")
 ```
 
 This will return: `/api/logs/123/2025-05-27`.
 
-The argument names are synthesized by the HummingbirdMacroRouting, so they're available to well-behaving editors/IDEs:
+The argument names are synthesized by MacroRouting, so they're available to well-behaving editors/IDEs:
 
-![IDE completion of `ApiController.$Routing.logs.resolvedPath`](https://files.scoat.es/IKYWGNmUCq.gif)
+![IDE completion of `ApiController.$Routing.logs.path`](https://files.scoat.es/IKYWGNmUCq.gif)
 
 ## Tests
 
