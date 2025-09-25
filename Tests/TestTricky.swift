@@ -11,11 +11,13 @@ struct MacroRoutingTestTricky {
     @Test("Reserved Words Structure")
     func testStructure() {
         #expect(Controller.$Routing.do.method == .get)
+        #expect(Controller.$Routing.do.prefixedPath == "/do")
         #expect(Controller.$Routing.do.path == "/do")
 
         #expect(Controller.$Routing.func.method == .post)
-        #expect(Controller.$Routing.func.path == "/func/{throw}/{catch}")
-        #expect(Controller.$Routing.func.resolvedPath(throw: "thrown", catch: "caught") == "/func/thrown/caught")
+        #expect(Controller.$Routing.func.prefixedPath == "/func/{throw}/{catch}")
+        // the tricky part here is the keywords
+        #expect(Controller.$Routing.func.path(throw: "thrown", catch: "caught") == "/func/thrown/caught")
     }
 
 }

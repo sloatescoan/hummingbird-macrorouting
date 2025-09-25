@@ -12,9 +12,11 @@ struct SimpleMacroRoutingTests {
     func testStructureStatic() {
         #expect(Controller.$Routing.logIn.method == .get)
         #expect(Controller.$Routing.logIn.path == "/login")
+        #expect(Controller.$Routing.logIn.prefixedPath == "/login")
 
         #expect(Controller.$Routing.logOutHandler.method == .post)
         #expect(Controller.$Routing.logOutHandler.path == "/logout")
+        #expect(Controller.$Routing.logOutHandler.prefixedPath == "/logout")
     }
 
     @Test("Instance Structure")
