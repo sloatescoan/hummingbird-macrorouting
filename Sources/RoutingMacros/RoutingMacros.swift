@@ -206,7 +206,12 @@ public struct RoutingMacro: ExtensionMacro {
                 code += """
                     @available(*, deprecated, renamed: "path", message: "resolvedPath(…) has been renamed to path(…)")
                     static func resolvedPath(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
-                        path(\(captured.map({ "`\($0)`: `\($0)`"}).joined(separator: ", ")))
+                        path(\(captured.map({
+                            ReservedWord(rawValue: $0) == nil ?
+                                "\($0): \($0)"
+                                :
+                                "`\($0)`: `\($0)`"
+                        }).joined(separator: ", ")))
                     }
                     static func path(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
                         "/\(out.joined(separator: "/"))"

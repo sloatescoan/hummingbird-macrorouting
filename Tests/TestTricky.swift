@@ -15,9 +15,9 @@ struct MacroRoutingTestTricky {
         #expect(Controller.$Routing.do.path == "/do")
 
         #expect(Controller.$Routing.func.method == .post)
-        #expect(Controller.$Routing.func.prefixedPath == "/func/{throw}/{catch}")
+        #expect(Controller.$Routing.func.prefixedPath == "/func/{foo}/{throw}/{catch}")
         // the tricky part here is the keywords
-        #expect(Controller.$Routing.func.path(throw: "thrown", catch: "caught") == "/func/thrown/caught")
+        #expect(Controller.$Routing.func.path(foo: "bar", throw: "thrown", catch: "caught") == "/func/bar/thrown/caught")
     }
 
 }
