@@ -16,13 +16,13 @@ struct MacroRoutingTestSimple {
         #expect(Controller.$Routing.logOutHandler.method == .post)
         #expect(Controller.$Routing.logOutHandler.path == "/logout")
 
-        #expect(Controller.$Routing.prefix == nil)
+        #expect(Controller.$Routing.$prefix == nil)
 
         // digging into paths in $all is easier than comparing the structs directly
         #expect(
-            Controller.$Routing.$all.map({ $0.path }) == [
-                Controller.$Routing.logIn.path,
-                Controller.$Routing.logOutHandler.path
+            Controller.$Routing.$all.map({ $0.prefixedPath }) == [
+                Controller.$Routing.logIn.prefixedPath,
+                Controller.$Routing.logOutHandler.prefixedPath
             ]
         )
     }

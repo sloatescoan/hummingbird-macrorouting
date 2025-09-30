@@ -167,7 +167,7 @@ public struct RoutingMacro: ExtensionMacro {
                 static let $all: [any MacroRoutingRoute.Type] = [
                     \(routes.map({ "`" + $0.name + "`" + ".self" }).joined(separator: ", "))
                 ]
-                static let prefix: String? = \(prefix == nil ? "nil" : "\"\(prefix!)\"")
+                static let $prefix: String? = \(prefix == nil ? "nil" : "\"\(prefix!)\"")
         """
 
         for route in routes {
@@ -195,17 +195,25 @@ public struct RoutingMacro: ExtensionMacro {
                 struct `\(route.name)`: MacroRoutingRoute {
                     private init() {}
                     static let method: HTTPRequest.Method = .\(route.method.rawValue.lowercased())
-                    static let rawPath: String = "\(route.path)"
                     static let handler: String = "\(route.handler)"
                     static let name: String = "\(route.name)"
+                    static let prefixedPath: String = "\(prefixedPath)"
+                    static let rawPath: String = "\(route.path)"
             """
 
             if captured.count > 0 {
-                // for routes that have captured arguments, mark path as deprecated, and provide resolvedPath
+                // for routes that have captured arguments, provide path(…) (formerly resolvedPath(…))
                 code += """
-                    @available(*, deprecated, renamed: "rawPath", message: "path will be removed for routes that have captured arguments; you probably want resolvedPath(…)")
-                    static let path: String = "\(prefixedPath)"
+                    @available(*, deprecated, renamed: "path", message: "resolvedPath(…) has been renamed to path(…)")
                     static func resolvedPath(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
+                        path(\(captured.map({
+                            ReservedWord(rawValue: $0) == nil ?
+                                "\($0): \($0)"
+                                :
+                                "`\($0)`: `\($0)`"
+                        }).joined(separator: ", ")))
+                    }
+                    static func path(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
                         "/\(out.joined(separator: "/"))"
                     }
                 """

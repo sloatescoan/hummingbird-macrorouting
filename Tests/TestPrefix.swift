@@ -10,13 +10,15 @@ struct MacroRoutingTestPrefix {
 
     @Test("Static Structure")
     func testStructureStatic() {
-        #expect(Controller.$Routing.prefix == "/api")
+        #expect(Controller.$Routing.$prefix == "/api")
 
         #expect(Controller.$Routing.auth.method == .get)
-        #expect(Controller.$Routing.auth.path == "/api/auth")
-        #expect(Controller.$Routing.deauth.path == "/api/deauth")
+        #expect(Controller.$Routing.auth.prefixedPath == "/api/auth")
+        #expect(Controller.$Routing.deauth.prefixedPath == "/api/deauth")
         #expect(Controller.$Routing.auth.rawPath == "/auth")
         #expect(Controller.$Routing.deauth.rawPath == "/deauth")
+        #expect(Controller.$Routing.auth.path == "/api/auth")
+        #expect(Controller.$Routing.deauth.path == "/api/deauth")
     }
 
     @Test("Instance Structure")
@@ -49,7 +51,11 @@ struct MacroRoutingTestPrefix {
 
     @Test("Resolved Path")
     func testPathResolution() async throws {
+        #expect(Controller.$Routing.auth.rawPath == "/auth")
+        #expect(Controller.$Routing.auth.prefixedPath == "/api/auth")
         #expect(Controller.$Routing.auth.path == "/api/auth")
-        #expect(Controller.$Routing.deauthId.resolvedPath(id: "test") == "/api/deauth/test")
+        #expect(Controller.$Routing.deauthId.rawPath == "/deauth/:id")
+        #expect(Controller.$Routing.deauthId.prefixedPath == "/api/deauth/:id")
+        #expect(Controller.$Routing.deauthId.path(id: "test") == "/api/deauth/test")
     }
 }

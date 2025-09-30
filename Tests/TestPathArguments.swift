@@ -11,40 +11,40 @@ struct MacroRoutingTestPathArguments {
     @Test("Static Structure")
     func testStructureStatic() {
         #expect(Controller.$Routing.bookTitle.method == .get)
-        #expect(Controller.$Routing.bookTitle.path == "/book/:title")
+        #expect(Controller.$Routing.bookTitle.rawPath == "/book/:title")
     }
 
     @Test("Replacements")
     func testReplacements() {
         #expect(
-            Controller.$Routing.bookTitle.resolvedPath(title: "cryptonomicon") == "/book/cryptonomicon"
+            Controller.$Routing.bookTitle.path(title: "cryptonomicon") == "/book/cryptonomicon"
         )
         #expect(
-            Controller.$Routing.movieTitle.resolvedPath(title: "ratatouille") == "/movie/ratatouille"
+            Controller.$Routing.movieTitle.path(title: "ratatouille") == "/movie/ratatouille"
         )
 
         #expect(
-            Controller.$Routing.bookTitleYear.resolvedPath(
+            Controller.$Routing.bookTitleYear.path(
                 title: "cryptonomicon", year: "1999"
             ) == "/book/cryptonomicon/1999"
         )
         #expect(
-            Controller.$Routing.movieTitleYear.resolvedPath(
+            Controller.$Routing.movieTitleYear.path(
                 title: "ratatouille", year: "2007"
             ) == "/movie/ratatouille/2007"
         )
 
-        #expect(Controller.$Routing.other.path == "/other/{one}/{two}/{three}/{four}/{five}")
+        #expect(Controller.$Routing.other.rawPath == "/other/{one}/{two}/{three}/{four}/{five}")
         #expect(
-            Controller.$Routing.other.resolvedPath(
+            Controller.$Routing.other.path(
                 one: "apple", two: "banana", three: "carrot",
                 four: "durian", five: "eggplant" 
             ) == "/other/apple/banana/carrot/durian/eggplant"
         )
 
-        #expect(Controller.$Routing.mixed.path == "/mixed/{one}/:two/{three}/:four/{five}")
+        #expect(Controller.$Routing.mixed.rawPath == "/mixed/{one}/:two/{three}/:four/{five}")
         #expect(
-            Controller.$Routing.mixed.resolvedPath(
+            Controller.$Routing.mixed.path(
                 one: "apple", two: "banana", three: "carrot",
                 four: "durian", five: "eggplant" 
             ) == "/mixed/apple/banana/carrot/durian/eggplant"

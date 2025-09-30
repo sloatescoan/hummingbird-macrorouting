@@ -1,0 +1,60 @@
+// this list is from
+// https://github.com/swiftlang/swift-syntax/blob/974c292380c1b7961f901ce43dfc794e8d7ffa57/CodeGeneration/Sources/SyntaxSupport/KeywordSpec.swift
+// it may need updating over time
+enum ReservedWord: String, RawRepresentable {
+  case `Any`
+  case `as`
+  case `associatedtype`
+  case `break`
+  case `case`
+  case `catch`
+  case `class`
+  case `continue`
+  case `default`
+  case `defer`
+  case `deinit`
+  case `do`
+  case `else`
+  case `enum`
+  case `extension`
+  case `fallthrough`
+  case `false`
+  case `fileprivate`
+  case `for`
+  case `func`
+  case `guard`
+  case `if`
+  case `import`
+  case `in`
+  case `init`
+  case `inout`
+  case `internal`
+  case `is`
+  case `let`
+  case `nil`
+  case `operator`
+  case `precedencegroup`
+  case `private`
+  case `Protocol`
+  case `protocol`
+  case `public`
+  case `repeat`
+  case `rethrows`
+  case `return`
+  case `self`
+  case `Self`
+  case `static`
+  case `struct`
+  case `subscript`
+  case `super`
+  case `switch`
+  case `throw`
+  case `throws`
+  case `true`
+  case `try`
+  case `Type`
+  case `typealias`
+  case `var`
+  case `where`
+  case `while`
+}

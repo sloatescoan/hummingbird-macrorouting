@@ -10,7 +10,7 @@ struct TrickyMacroRoutingController {
         return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "Logged in")))
     }
 
-    @POST("/func/{throw}/{catch}")
+    @POST("/func/{foo}/{throw}/{catch}")
     @Sendable func `func`(request: Request, context: Context) async throws -> Response {
         return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "Logged out")))
     }
