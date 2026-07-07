@@ -127,8 +127,13 @@ public struct RoutingMacro: ExtensionMacro {
             }
         }
 
-        // make sure we don't have more than one route with the same name:
+        // make sure we don't have more than one route with the same name.
+        // Diagnose each collision *and* drop the duplicate from codegen (first
+        // occurrence wins) — otherwise we'd emit two `struct <name>` declarations
+        // and the compiler would pile an "invalid redeclaration" error, pointing
+        // into generated code, on top of our clear diagnostic.
         var routeNames: Set<String> = []
+        var uniqueRoutes: [CapturedRoute] = []
         for route in routes {
             if routeNames.contains(route.name) {
                 context.diagnose(
@@ -139,6 +144,7 @@ public struct RoutingMacro: ExtensionMacro {
                 )
             } else {
                 routeNames.insert(route.name)
+                uniqueRoutes.append(route)
             }
         }
 
@@ -147,7 +153,7 @@ public struct RoutingMacro: ExtensionMacro {
             var $routes: RouteCollectionContainer<Context> {
                 let routes = RouteCollection(context: Context.self)
         """
-        for route in routes {
+        for route in uniqueRoutes {
             code += """
                 _ = routes.on(
                     "\(prefix ?? "")\(route.path)",
@@ -165,12 +171,12 @@ public struct RoutingMacro: ExtensionMacro {
             struct $Routing {
                 private init() {}
                 static let $all: [any MacroRoutingRoute.Type] = [
-                    \(routes.map({ "`" + $0.name + "`" + ".self" }).joined(separator: ", "))
+                    \(uniqueRoutes.map({ "`" + $0.name + "`" + ".self" }).joined(separator: ", "))
                 ]
                 static let $prefix: String? = \(prefix == nil ? "nil" : "\"\(prefix!)\"")
         """
 
-        for route in routes {
+        for route in uniqueRoutes {
             var captured: [String] = []
             var out: [String] = []
 
