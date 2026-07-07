@@ -40,6 +40,18 @@ let package = Package(
                 .product(name: "HummingbirdTesting", package: "hummingbird")
             ],
             path: "Tests"
+        ),
+        // Unit tests for the macro's *syntactic* expansion + diagnostics, using
+        // SwiftSyntaxMacrosTestSupport. Kept separate from the runtime test target
+        // (which compiles Hummingbird fixtures) and out of the Tests/ directory to
+        // avoid overlapping-source-path errors.
+        .testTarget(
+            name: "RoutingMacrosTests",
+            dependencies: [
+                .byName(name: "RoutingMacros"),
+                .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
+            ],
+            path: "MacroExpansionTests"
         )
     ]
 )
