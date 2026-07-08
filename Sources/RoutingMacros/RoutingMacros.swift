@@ -48,6 +48,15 @@ struct CapturedRoute {
     }
 }
 
+/// Reconstruct the inner text of a string literal, preserving every segment —
+/// including `\(…)` interpolations, which are emitted verbatim (e.g. `\(API.version)`).
+/// Reading only `segments.first` (the old approach) silently dropped everything
+/// after the first interpolation. The reconstructed text is spliced back between
+/// quotes in the generated code, so the Swift compiler evaluates the interpolation.
+private func reconstructedLiteral(_ literal: StringLiteralExprSyntax) -> String {
+    literal.segments.map { $0.description }.joined()
+}
+
 public struct RoutingMacro: ExtensionMacro {
     public static func expansion(
         of node: SwiftSyntax.AttributeSyntax,
@@ -63,7 +72,7 @@ public struct RoutingMacro: ExtensionMacro {
         let prefix: String?
         if let prefixArg = node.arguments?.as(LabeledExprListSyntax.self)?.first {
             if let stringLiteral = prefixArg.expression.as(StringLiteralExprSyntax.self) {
-                prefix = stringLiteral.segments.first?.as(StringSegmentSyntax.self)?.content.text
+                prefix = reconstructedLiteral(stringLiteral)
             } else {
                 prefix = nil
             }
@@ -89,8 +98,7 @@ public struct RoutingMacro: ExtensionMacro {
                     let arguments = httpAttribute.arguments?.as(LabeledExprListSyntax.self),
                     let firstArg = arguments.first?.expression.as(StringLiteralExprSyntax.self),
                     let methodName = httpAttribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text,
-                    let method = Method(rawValue: methodName.lowercased()),
-                    let path = firstArg.segments.first?.as(StringSegmentSyntax.self)?.content.text
+                    let method = Method(rawValue: methodName.lowercased())
                 else {
                     context.diagnose(
                         Diagnostic(
@@ -101,12 +109,19 @@ public struct RoutingMacro: ExtensionMacro {
                     return nil
                 }
 
+                // Preserve any `\(…)` interpolation in the path so it passes
+                // through to the generated code instead of truncating.
+                let path = reconstructedLiteral(firstArg)
+
                 // Extract the route name
                 let name: String
                 if
-                    let nameExpr = arguments.first(where: { $0.label?.text == "name" })?.expression.as(StringLiteralExprSyntax.self),
-                    let nameValue = nameExpr.segments.first?.as(StringSegmentSyntax.self)?.content.text
+                    let nameExpr = arguments.first(where: { $0.label?.text == "name" })?.expression.as(StringLiteralExprSyntax.self)
                 {
+                    // Reconstruct fully: an interpolated name isn't a valid
+                    // identifier, so it should fail the check below rather than
+                    // be truncated to a passing prefix.
+                    let nameValue = reconstructedLiteral(nameExpr)
                     let isValid = nameValue.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil
                     guard isValid else {
                         context.diagnose(
