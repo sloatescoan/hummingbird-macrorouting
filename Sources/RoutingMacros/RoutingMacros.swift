@@ -27,6 +27,8 @@ struct CapturedRoute {
     let handler: String
     let name: String
     let function: FunctionDeclSyntax
+    // param name -> explicit Swift type from the `types:` argument (defaults to String when absent)
+    let paramTypes: [String: String]
 
     static func stripped(_ val: String) -> String {
         var val = val
@@ -39,12 +41,13 @@ struct CapturedRoute {
         return val
     }
 
-    init(method: Method, path: String, handler: String, name: String, function: FunctionDeclSyntax) {
+    init(method: Method, path: String, handler: String, name: String, function: FunctionDeclSyntax, paramTypes: [String: String] = [:]) {
         self.method = method
         self.path = Self.stripped(path)
         self.handler = Self.stripped(handler)
         self.name = Self.stripped(name)
         self.function = function
+        self.paramTypes = paramTypes
     }
 }
 
@@ -122,8 +125,33 @@ public struct RoutingMacro: ExtensionMacro {
                     name = function.name.text
                 }
 
+                // Extract the optional `types:` dictionary mapping path parameter names to Swift types.
+                var paramTypes: [String: String] = [:]
+                if
+                    let typesExpr = arguments.first(where: { $0.label?.text == "types" })?.expression.as(DictionaryExprSyntax.self),
+                    case let .elements(elements) = typesExpr.content
+                {
+                    for element in elements {
+                        guard
+                            let key = element.key.as(StringLiteralExprSyntax.self)?
+                                .segments.first?.as(StringSegmentSyntax.self)?.content.text
+                        else { continue }
+                        // Values look like `UUID.self`; take the base (`UUID`) as the type name.
+                        let typeName: String
+                        if
+                            let member = element.value.as(MemberAccessExprSyntax.self),
+                            member.declName.baseName.text == "self",
+                            let base = member.base
+                        {
+                            typeName = base.trimmedDescription
+                        } else {
+                            typeName = element.value.trimmedDescription
+                        }
+                        paramTypes[key] = typeName
+                    }
+                }
 
-                return CapturedRoute(method: method, path: path, handler: function.name.text, name: name, function: function)
+                return CapturedRoute(method: method, path: path, handler: function.name.text, name: name, function: function, paramTypes: paramTypes)
             }
         }
 
@@ -191,6 +219,19 @@ public struct RoutingMacro: ExtensionMacro {
                 }
             }
 
+            // A `types:` key that doesn't match a captured parameter is almost certainly a typo.
+            for typedParam in route.paramTypes.keys where !captured.contains(typedParam) {
+                context.diagnose(
+                    Diagnostic(
+                        node: route.function,
+                        message: MsgUnknownPathParameter(name: typedParam)
+                    )
+                )
+            }
+
+            // Resolve each captured parameter's declared type, defaulting to String.
+            func typeFor(_ param: String) -> String { route.paramTypes[param] ?? "String" }
+
             code += """
                 struct `\(route.name)`: MacroRoutingRoute {
                     private init() {}
@@ -205,7 +246,7 @@ public struct RoutingMacro: ExtensionMacro {
                 // for routes that have captured arguments, provide path(…) (formerly resolvedPath(…))
                 code += """
                     @available(*, deprecated, renamed: "path", message: "resolvedPath(…) has been renamed to path(…)")
-                    static func resolvedPath(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
+                    static func resolvedPath(\(captured.map({ "\($0): \(typeFor($0))"}).joined(separator: ", "))) -> String {
                         path(\(captured.map({
                             ReservedWord(rawValue: $0) == nil ?
                                 "\($0): \($0)"
@@ -213,7 +254,7 @@ public struct RoutingMacro: ExtensionMacro {
                                 "`\($0)`: `\($0)`"
                         }).joined(separator: ", ")))
                     }
-                    static func path(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
+                    static func path(\(captured.map({ "\($0): \(typeFor($0))"}).joined(separator: ", "))) -> String {
                         "/\(out.joined(separator: "/"))"
                     }
                 """

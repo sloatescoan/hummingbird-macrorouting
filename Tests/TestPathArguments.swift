@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import Hummingbird
 import HummingbirdMacroRouting
@@ -46,9 +47,29 @@ struct MacroRoutingTestPathArguments {
         #expect(
             Controller.$Routing.mixed.path(
                 one: "apple", two: "banana", three: "carrot",
-                four: "durian", five: "eggplant" 
+                four: "durian", five: "eggplant"
             ) == "/mixed/apple/banana/carrot/durian/eggplant"
         )
     }
-    
+
+    @Test("Typed Parameters")
+    func testTypedParameters() {
+        // Single UUID parameter — interpolation matches .uuidString.
+        let id = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+        #expect(
+            Controller.$Routing.user.path(id: id) == "/user/E621E1F8-C36C-495A-93FC-0C247A3E6E5F"
+        )
+
+        // Mixed types: UUID + Int, with an untyped (String) parameter defaulting through.
+        #expect(
+            Controller.$Routing.orgUser.path(orgId: id, userId: 42, tag: "featured")
+                == "/org/E621E1F8-C36C-495A-93FC-0C247A3E6E5F/user/42/tag/featured"
+        )
+
+        // Project-defined CustomStringConvertible type.
+        #expect(
+            Controller.$Routing.post.path(slug: Slug(value: "Hello-World")) == "/post/hello-world"
+        )
+    }
+
 }

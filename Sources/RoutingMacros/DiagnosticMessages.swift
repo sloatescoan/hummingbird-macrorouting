@@ -15,6 +15,15 @@ struct MsgNameConflict: DiagnosticMessage {
     }
 }
 
+struct MsgUnknownPathParameter: DiagnosticMessage {
+    let diagnosticID = MessageID(domain: "MacroRouting", id: "unknownPathParameter")
+    let severity: DiagnosticSeverity = .error
+    let message: String
+    init(name: String) {
+        self.message = "Parameter '\(name)' in types: is not a captured path parameter"
+    }
+}
+
 struct MsgNameError: DiagnosticMessage {
     let diagnosticID = MessageID(domain: "MacroRouting", id: "nameError")
     let severity: DiagnosticSeverity = .error

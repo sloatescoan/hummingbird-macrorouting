@@ -196,6 +196,46 @@ The argument names are synthesized by MacroRouting, so they're available to well
 
 ![IDE completion of `ApiController.$Routing.logs.path`](https://files.scoat.es/IKYWGNmUCq.gif)
 
+#### Typed path parameters
+
+By default, every synthesized `path(…)` argument is a `String`. You can give individual parameters a real Swift type with the `types:` argument, keyed by parameter name:
+
+```swift
+    @GET("/users/{id}", types: ["id": UUID.self])
+    @Sendable func user(request: Request, context: Context) async throws -> Response {
+        …
+    }
+```
+
+`ApiController.$Routing.user.path(id:)` now takes a `UUID`, so you can pass the value directly instead of stringifying at the call site:
+
+```swift
+let path = ApiController.$Routing.user.path(id: someUuid) // -> "/users/00000000-0000-0000-0000-000000000000"
+```
+
+The value's string-interpolation form (its `description`) is used to build the path—for `UUID` that is identical to `.uuidString`. This is the outbound mirror of Hummingbird's inbound `context.parameters.get(_:as:)`.
+
+Only the parameters you name in `types` are custom-typed; the rest stay `String`.
+
+```swift
+    @GET("/orgs/{orgId}/users/{userId}/tag/{tag}", types: ["orgId": UUID.self, "userId": Int.self])
+    // -> path(orgId: UUID, userId: Int, tag: String)
+```
+
+Any type works as long as it conforms to `CustomStringConvertible`, *including your own project's types*—just conform them and pass them in `types:`:
+
+```swift
+struct Slug: CustomStringConvertible {
+    let value: String
+    var description: String { value.lowercased() }
+}
+
+// …
+    @GET("/post/{slug}", types: ["slug": Slug.self])
+    // -> path(slug: Slug)
+```
+
+
 ## Tests
 
 There's some useful reference code available in the [test suite](https://github.com/sloatescoan/hummingbird-macrorouting/tree/main/Tests).
