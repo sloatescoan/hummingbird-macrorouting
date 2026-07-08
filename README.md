@@ -198,10 +198,10 @@ The argument names are synthesized by MacroRouting, so they're available to well
 
 #### Typed path parameters
 
-By default, every synthesized `path(…)` argument is a `String`. You can give individual parameters a real Swift type with the `types:` argument, keyed by parameter name:
+By default, every synthesized `path(…)` argument is a `String`. You can give individual parameters a real Swift type with the `conform:` argument, keyed by parameter name. 
 
 ```swift
-    @GET("/users/{id}", types: ["id": UUID.self])
+    @GET("/users/{id}", conform: ["id": UUID.self])
     @Sendable func user(request: Request, context: Context) async throws -> Response {
         …
     }
@@ -215,14 +215,14 @@ let path = ApiController.$Routing.user.path(id: someUuid) // -> "/users/00000000
 
 The value's string-interpolation form (its `description`) is used to build the path—for `UUID` that is identical to `.uuidString`. This is the outbound mirror of Hummingbird's inbound `context.parameters.get(_:as:)`.
 
-Only the parameters you name in `types` are custom-typed; the rest stay `String`.
+Only the parameters you name in `conform:` get a custom type; the rest stay `String`.
 
 ```swift
-    @GET("/orgs/{orgId}/users/{userId}/tag/{tag}", types: ["orgId": UUID.self, "userId": Int.self])
+    @GET("/orgs/{orgId}/users/{userId}/tag/{tag}", conform: ["orgId": UUID.self, "userId": Int.self])
     // -> path(orgId: UUID, userId: Int, tag: String)
 ```
 
-Any type works as long as it conforms to `CustomStringConvertible`, *including your own project's types*—just conform them and pass them in `types:`:
+Any type works, so long as it conforms to `CustomStringConvertible`, *including your own project's types*—just conform them and pass them in `conform:`:
 
 ```swift
 struct Slug: CustomStringConvertible {
@@ -231,9 +231,11 @@ struct Slug: CustomStringConvertible {
 }
 
 // …
-    @GET("/post/{slug}", types: ["slug": Slug.self])
+    @GET("/post/{slug}", conform: ["slug": Slug.self])
     // -> path(slug: Slug)
 ```
+
+> **Important:** This does *not* affect how Hummingbird interprets a route/path, but it *does* provide a type-safe way to specify a route with `$Routing.pathHandler.path(…)`.
 
 
 ## Tests

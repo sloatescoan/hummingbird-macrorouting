@@ -27,7 +27,7 @@ struct CapturedRoute {
     let handler: String
     let name: String
     let function: FunctionDeclSyntax
-    // param name -> explicit Swift type from the `types:` argument (defaults to String when absent)
+    // param name -> explicit Swift type from the `conform:` argument (defaults to String when absent)
     let paramTypes: [String: String]
 
     static func stripped(_ val: String) -> String {
@@ -125,11 +125,11 @@ public struct RoutingMacro: ExtensionMacro {
                     name = function.name.text
                 }
 
-                // Extract the optional `types:` dictionary mapping path parameter names to Swift types.
+                // Extract the optional `conform:` dictionary mapping path parameter names to Swift types.
                 var paramTypes: [String: String] = [:]
                 if
-                    let typesExpr = arguments.first(where: { $0.label?.text == "types" })?.expression.as(DictionaryExprSyntax.self),
-                    case let .elements(elements) = typesExpr.content
+                    let conformExpr = arguments.first(where: { $0.label?.text == "conform" })?.expression.as(DictionaryExprSyntax.self),
+                    case let .elements(elements) = conformExpr.content
                 {
                     for element in elements {
                         guard
@@ -219,7 +219,7 @@ public struct RoutingMacro: ExtensionMacro {
                 }
             }
 
-            // A `types:` key that doesn't match a captured parameter is almost certainly a typo.
+            // A `conform:` key that doesn't match a captured parameter is almost certainly a typo.
             for typedParam in route.paramTypes.keys where !captured.contains(typedParam) {
                 context.diagnose(
                     Diagnostic(

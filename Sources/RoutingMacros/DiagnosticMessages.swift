@@ -20,7 +20,7 @@ struct MsgUnknownPathParameter: DiagnosticMessage {
     let severity: DiagnosticSeverity = .error
     let message: String
     init(name: String) {
-        self.message = "Parameter '\(name)' in types: is not a captured path parameter"
+        self.message = "Parameter '\(name)' in conform: is not a captured path parameter"
     }
 }
 
