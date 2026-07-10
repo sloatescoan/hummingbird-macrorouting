@@ -2,7 +2,7 @@ import Foundation
 import Hummingbird
 import HummingbirdMacroRouting
 
-// A project-defined type used in `conform:` to accept custom CustomStringConvertible
+// A project-defined type used with `#p` to accept a custom CustomStringConvertible type.
 struct Slug: CustomStringConvertible {
     let value: String
     var description: String { value.lowercased() }
@@ -69,15 +69,15 @@ struct PathArgumentsMacroRoutingController {
     }
 
     // A single typed parameter (UUID from Foundation).
-    @GET("/user/{id}", conform: ["id": UUID.self])
+    @GET("/user/\(#p("id", UUID.self))")
     @Sendable func user(request: Request, context: Context) async throws -> Response {
         return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(
             string: "User {id} = \(context.parameters.get("id", as: String.self) ?? "nil")"
         )))
     }
 
-    // Mixed typed parameters, plus an untyped one that defaults to String.
-    @GET("/org/{orgId}/user/{userId}/tag/{tag}", conform: ["orgId": UUID.self, "userId": Int.self])
+    // Mixed typed parameters, plus an untyped ({tag}) one that defaults to String.
+    @GET("/org/\(#p("orgId", UUID.self))/user/\(#p("userId", Int.self))/tag/{tag}")
     @Sendable func orgUser(request: Request, context: Context) async throws -> Response {
         return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(
             string: "OrgUser = "
@@ -88,10 +88,26 @@ struct PathArgumentsMacroRoutingController {
     }
 
     // A project-defined CustomStringConvertible type.
-    @GET("/post/{slug}", conform: ["slug": Slug.self])
+    @GET("/post/\(#p("slug", Slug.self))")
     @Sendable func post(request: Request, context: Context) async throws -> Response {
         return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(
             string: "Post {slug} = \(context.parameters.get("slug", as: String.self) ?? "nil")"
         )))
+    }
+
+    // The remaining spellings of the parameter macro — all resolve to the same ParamMacro.
+    @GET("/alias/param/\(#param("id", UUID.self))")
+    @Sendable func aliasParam(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "aliasParam")))
+    }
+
+    @GET("/alias/hb/\(#hbParam("id", UUID.self))")
+    @Sendable func aliasHbParam(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "aliasHbParam")))
+    }
+
+    @GET("/alias/explicit/\(#HummingbirdMacroRoutingParam("id", UUID.self))")
+    @Sendable func aliasExplicitParam(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "aliasExplicitParam")))
     }
 }

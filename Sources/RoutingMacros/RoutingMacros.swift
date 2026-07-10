@@ -14,12 +14,46 @@ struct RoutingMacros: CompilerPlugin {
         HEADMacro.self,
         PATCHMacro.self,
         RoutingMacro.self,
+        ParamMacro.self,
     ]
+}
+
+// Freestanding expression macro used inside a route path: `\(#param("id", UUID.self))`.
+// It expands to the string literal "{id}" so the surrounding path type-checks as a String and
+// its runtime value is the Hummingbird placeholder. RoutingMacro reads the (unexpanded) call
+// out of the path's syntax to recover both the parameter name and its Swift type.
+public struct ParamMacro: ExpressionMacro {
+    public static func expansion(
+        of node: some FreestandingMacroExpansionSyntax,
+        in context: some MacroExpansionContext
+    ) throws -> ExprSyntax {
+        guard
+            let name = node.arguments.first?.expression.as(StringLiteralExprSyntax.self)?
+                .segments.first?.as(StringSegmentSyntax.self)?.content.text
+        else {
+            return "\"{}\""
+        }
+        return "\"{\(raw: name)}\""
+    }
 }
 enum Method: String, CaseIterable {
     case get, post, put, delete, head, patch
     static var allValues: [String] { Self.allCases.map { "\($0)".uppercased() } }
 }
+
+// The spellings RoutingMacro recognizes as the path-parameter macro. Gated by the same package
+// traits that gate the declarations, so a disabled name is no longer claimed as ours.
+let paramMacroNames: Set<String> = {
+    var names: Set<String> = ["HummingbirdMacroRoutingParam"]
+    #if !ExplicitParamNameOnly
+    names.insert("hbParam")
+    #endif
+    #if !ExplicitParamNameOnly && !LongParamNamesOnly
+    names.insert("p")
+    names.insert("param")
+    #endif
+    return names
+}()
 
 struct CapturedRoute {
     let method: Method
@@ -27,7 +61,7 @@ struct CapturedRoute {
     let handler: String
     let name: String
     let function: FunctionDeclSyntax
-    // param name -> explicit Swift type from the `conform:` argument (defaults to String when absent)
+    // param name -> explicit Swift type from a `#param(…)` in the path (defaults to String when absent)
     let paramTypes: [String: String]
 
     static func stripped(_ val: String) -> String {
@@ -92,8 +126,7 @@ public struct RoutingMacro: ExtensionMacro {
                     let arguments = httpAttribute.arguments?.as(LabeledExprListSyntax.self),
                     let firstArg = arguments.first?.expression.as(StringLiteralExprSyntax.self),
                     let methodName = httpAttribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text,
-                    let method = Method(rawValue: methodName.lowercased()),
-                    let path = firstArg.segments.first?.as(StringSegmentSyntax.self)?.content.text
+                    let method = Method(rawValue: methodName.lowercased())
                 else {
                     context.diagnose(
                         Diagnostic(
@@ -125,30 +158,49 @@ public struct RoutingMacro: ExtensionMacro {
                     name = function.name.text
                 }
 
-                // Extract the optional `conform:` dictionary mapping path parameter names to Swift types.
+                // Reconstruct the path from the string literal's segments. Plain text passes through;
+                // each `#param("name", Type.self)` interpolation contributes a `{name}` placeholder
+                // (what Hummingbird sees) and records the Swift type for the synthesized `path(…)`.
+                var path = ""
                 var paramTypes: [String: String] = [:]
-                if
-                    let conformExpr = arguments.first(where: { $0.label?.text == "conform" })?.expression.as(DictionaryExprSyntax.self),
-                    case let .elements(elements) = conformExpr.content
-                {
-                    for element in elements {
+                var malformedInterpolation = false
+                for segment in firstArg.segments {
+                    if let str = segment.as(StringSegmentSyntax.self) {
+                        path += str.content.text
+                    } else if let expr = segment.as(ExpressionSegmentSyntax.self) {
                         guard
-                            let key = element.key.as(StringLiteralExprSyntax.self)?
+                            let call = expr.expressions.first?.expression.as(MacroExpansionExprSyntax.self),
+                            paramMacroNames.contains(call.macroName.text),
+                            let paramName = call.arguments.first?.expression.as(StringLiteralExprSyntax.self)?
                                 .segments.first?.as(StringSegmentSyntax.self)?.content.text
-                        else { continue }
-                        // Values look like `UUID.self`; take the base (`UUID`) as the type name.
+                        else {
+                            malformedInterpolation = true
+                            break
+                        }
+                        // The second argument is a `Type.self` metatype; take its base as the type name.
                         let typeName: String
                         if
-                            let member = element.value.as(MemberAccessExprSyntax.self),
-                            member.declName.baseName.text == "self",
-                            let base = member.base
+                            let typeExpr = call.arguments.dropFirst().first?.expression.as(MemberAccessExprSyntax.self),
+                            typeExpr.declName.baseName.text == "self",
+                            let base = typeExpr.base
                         {
                             typeName = base.trimmedDescription
+                        } else if let typeExpr = call.arguments.dropFirst().first?.expression {
+                            typeName = typeExpr.trimmedDescription
                         } else {
-                            typeName = element.value.trimmedDescription
+                            malformedInterpolation = true
+                            break
                         }
-                        paramTypes[key] = typeName
+                        path += "{\(paramName)}"
+                        paramTypes[paramName] = typeName
+                    } else {
+                        malformedInterpolation = true
+                        break
                     }
+                }
+                guard !malformedInterpolation else {
+                    context.diagnose(Diagnostic(node: member.decl, message: MsgMalformed()))
+                    return nil
                 }
 
                 return CapturedRoute(method: method, path: path, handler: function.name.text, name: name, function: function, paramTypes: paramTypes)
@@ -217,16 +269,6 @@ public struct RoutingMacro: ExtensionMacro {
                     // there are other types like wildcards, but those are harder to replace
                     out.append(component.description)
                 }
-            }
-
-            // A `conform:` key that doesn't match a captured parameter is almost certainly a typo.
-            for typedParam in route.paramTypes.keys where !captured.contains(typedParam) {
-                context.diagnose(
-                    Diagnostic(
-                        node: route.function,
-                        message: MsgUnknownPathParameter(name: typedParam)
-                    )
-                )
             }
 
             // Resolve each captured parameter's declared type, defaulting to String.

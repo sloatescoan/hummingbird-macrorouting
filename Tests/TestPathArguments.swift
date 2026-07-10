@@ -72,4 +72,13 @@ struct MacroRoutingTestPathArguments {
         )
     }
 
+    @Test("Parameter Macro Aliases")
+    func testParameterMacroAliases() {
+        // All four spellings resolve to the same ParamMacro and produce a typed path(id: UUID).
+        let id = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+        #expect(Controller.$Routing.aliasParam.path(id: id) == "/alias/param/E621E1F8-C36C-495A-93FC-0C247A3E6E5F")
+        #expect(Controller.$Routing.aliasHbParam.path(id: id) == "/alias/hb/E621E1F8-C36C-495A-93FC-0C247A3E6E5F")
+        #expect(Controller.$Routing.aliasExplicitParam.path(id: id) == "/alias/explicit/E621E1F8-C36C-495A-93FC-0C247A3E6E5F")
+    }
+
 }
