@@ -134,4 +134,15 @@ struct PathArgumentsMacroRoutingController {
     @Sendable func repeatedParam(request: Request, context: Context) async throws -> Response {
         return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "repeated")))
     }
+
+    // Loose names that Hummingbird allows — supported via backticked (raw) identifiers.
+    @GET("/space/\(#p("user id", String.self))")
+    @Sendable func spacedName(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "spaced")))
+    }
+
+    @GET("/dash/\(#p("user-id", String.self))")
+    @Sendable func dashedName(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "dashed")))
+    }
 }

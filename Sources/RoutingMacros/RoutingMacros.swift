@@ -55,6 +55,31 @@ let paramMacroNames: Set<String> = {
     return names
 }()
 
+// Is `name` usable as a *bare* Swift identifier (no backticks needed)? Approximates Swift's
+// identifier grammar and covers Unicode letters; keywords also satisfy this by their characters.
+func isBareIdentifier(_ name: String) -> Bool {
+    guard let first = name.first, first == "_" || first.isLetter else { return false }
+    return name.dropFirst().allSatisfy { $0 == "_" || $0.isLetter || $0.isNumber }
+}
+
+// A path parameter name may be anything Hummingbird accepts, except characters that would break the
+// route path structure (`{`, `}`, `/`) or the generated Swift / string literals (backtick, backslash,
+// newlines). It also may not be empty or all-whitespace.
+func isValidParamName(_ name: String) -> Bool {
+    guard name.contains(where: { !$0.isWhitespace }) else { return false }
+    return !name.contains { "{}/`\\".contains($0) || $0.isNewline }
+}
+
+// Emit `name` as an argument *label*: bare when it's already a valid identifier (keywords are legal
+// bare labels too), backticked otherwise (raw identifiers — spaces, hyphens, digit-leads, …).
+func labelToken(_ name: String) -> String { isBareIdentifier(name) ? name : "`\(name)`" }
+
+// Emit `name` as a *value* reference: bare only for a plain identifier; keywords and raw identifiers
+// must be backticked to be referenced as an expression.
+func valueToken(_ name: String) -> String {
+    (isBareIdentifier(name) && ReservedWord(rawValue: name) == nil) ? name : "`\(name)`"
+}
+
 struct CapturedRoute {
     let method: Method
     let path: String
@@ -185,9 +210,10 @@ public struct RoutingMacro: ExtensionMacro {
                         let paramName = call.arguments.first?.expression.as(StringLiteralExprSyntax.self)?
                             .segments.first?.as(StringSegmentSyntax.self)?.content.text
                     {
-                        // The name becomes both a `{name}` path placeholder and a `path(name:)` argument
-                        // label, so it must be a plain identifier — reject spaces, braces, slashes, etc.
-                        guard paramName.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil else {
+                        // The name becomes both a `{name}` placeholder and a `path(name:)` argument
+                        // label. We allow anything Hummingbird does, except characters that break the
+                        // path structure or the generated code (see isValidParamName).
+                        guard isValidParamName(paramName) else {
                             context.diagnose(Diagnostic(node: call, message: MsgParamNameError(name: paramName)))
                             return nil
                         }
@@ -282,17 +308,17 @@ public struct RoutingMacro: ExtensionMacro {
                     let name = String(comp[comp.index(after: comp.startIndex)..<close])
                     let suffix = String(comp[comp.index(after: close)...])
                     captured.append(name)
-                    out.append("\\(`" + name + "`)" + suffix)
+                    out.append("\\(" + valueToken(name) + ")" + suffix)
                 } else if comp.last == "}", let open = comp.lastIndex(of: "{"), open != comp.startIndex {
                     // A literal prefix followed by `{name}` — Hummingbird's suffix-capture, e.g. `file{ext}`.
                     let prefixLiteral = String(comp[..<open])
                     let name = String(comp[comp.index(after: open)..<comp.index(before: comp.endIndex)])
                     captured.append(name)
-                    out.append(prefixLiteral + "\\(`" + name + "`)")
+                    out.append(prefixLiteral + "\\(" + valueToken(name) + ")")
                 } else if comp.first == ":" {
                     let name = String(comp.dropFirst())
                     captured.append(name)
-                    out.append("\\(`" + name + "`)")
+                    out.append("\\(" + valueToken(name) + ")")
                 } else {
                     // literal component, including wildcards (*, **, *.jpg, file.*) which bind no argument
                     out.append(comp)
@@ -322,15 +348,10 @@ public struct RoutingMacro: ExtensionMacro {
                 // for routes that have captured arguments, provide path(…) (formerly resolvedPath(…))
                 code += """
                     @available(*, deprecated, renamed: "path", message: "resolvedPath(…) has been renamed to path(…)")
-                    static func resolvedPath(\(uniqueCaptured.map({ "\($0): \(typeFor($0))"}).joined(separator: ", "))) -> String {
-                        path(\(uniqueCaptured.map({
-                            ReservedWord(rawValue: $0) == nil ?
-                                "\($0): \($0)"
-                                :
-                                "`\($0)`: `\($0)`"
-                        }).joined(separator: ", ")))
+                    static func resolvedPath(\(uniqueCaptured.map({ "\(labelToken($0)): \(typeFor($0))"}).joined(separator: ", "))) -> String {
+                        path(\(uniqueCaptured.map({ "\(labelToken($0)): \(valueToken($0))" }).joined(separator: ", ")))
                     }
-                    static func path(\(uniqueCaptured.map({ "\($0): \(typeFor($0))"}).joined(separator: ", "))) -> String {
+                    static func path(\(uniqueCaptured.map({ "\(labelToken($0)): \(typeFor($0))"}).joined(separator: ", "))) -> String {
                         "/\(out.joined(separator: "/"))"
                     }
                 """

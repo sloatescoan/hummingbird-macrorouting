@@ -102,4 +102,11 @@ struct MacroRoutingTestPathArguments {
         )
     }
 
+    @Test("Loose Parameter Names")
+    func testLooseNames() {
+        // Names Hummingbird allows but that aren't plain identifiers work via raw (backticked) labels.
+        #expect(Controller.$Routing.spacedName.path(`user id`: "abc") == "/space/abc")
+        #expect(Controller.$Routing.dashedName.path(`user-id`: "abc") == "/dash/abc")
+    }
+
 }

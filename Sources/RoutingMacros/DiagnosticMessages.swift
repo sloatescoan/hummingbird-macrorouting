@@ -29,7 +29,7 @@ struct MsgParamNameError: DiagnosticMessage {
     let severity: DiagnosticSeverity = .error
     let message: String
     init(name: String) {
-        self.message = "The parameter name '\(name)' must be a valid Swift identifier (it becomes both a path placeholder and a path(…) argument label)"
+        self.message = "The parameter name '\(name)' can't contain '/', '{', '}', a backtick or backslash, and can't be empty or all-whitespace (it becomes both a path placeholder and a path(…) argument label)"
     }
 }
 
