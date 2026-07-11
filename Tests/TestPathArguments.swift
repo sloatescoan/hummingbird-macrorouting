@@ -81,4 +81,25 @@ struct MacroRoutingTestPathArguments {
         #expect(Controller.$Routing.aliasExplicitParam.path(id: id) == "/alias/explicit/E621E1F8-C36C-495A-93FC-0C247A3E6E5F")
     }
 
+    @Test("Partial and Suffix Captures")
+    func testPartialCaptures() {
+        let id = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+        // prefix-capture {id}.jpg — literal suffix preserved.
+        #expect(Controller.$Routing.image.path(id: id) == "/img/E621E1F8-C36C-495A-93FC-0C247A3E6E5F.jpg")
+        // suffix-capture file{ext} — literal prefix preserved.
+        #expect(Controller.$Routing.download.path(ext: ".json") == "/download/file.json")
+        // reserved-word parameter name, backticked in the generated body.
+        #expect(Controller.$Routing.keyword.path(default: "x") == "/kw/x")
+    }
+
+    @Test("Repeated Parameter Collapses")
+    func testRepeatedParameter() {
+        // One `id:` argument fills every occurrence in the path.
+        let id = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+        #expect(
+            Controller.$Routing.repeatedParam.path(id: id)
+                == "/repeat/E621E1F8-C36C-495A-93FC-0C247A3E6E5F/again/E621E1F8-C36C-495A-93FC-0C247A3E6E5F"
+        )
+    }
+
 }

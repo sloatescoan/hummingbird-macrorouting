@@ -110,4 +110,28 @@ struct PathArgumentsMacroRoutingController {
     @Sendable func aliasExplicitParam(request: Request, context: Context) async throws -> Response {
         return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "aliasExplicitParam")))
     }
+
+    // Partial / prefix-capture: {id}.jpg (a literal suffix after the parameter).
+    @GET("/img/\(#p("id", UUID.self)).jpg")
+    @Sendable func image(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "image")))
+    }
+
+    // Suffix-capture: a literal prefix before the parameter, file{ext}.
+    @GET("/download/file\(#p("ext", String.self))")
+    @Sendable func download(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "download")))
+    }
+
+    // A reserved word as the parameter name — must be backticked in the generated body.
+    @GET("/kw/\(#p("default", String.self))")
+    @Sendable func keyword(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "keyword")))
+    }
+
+    // A repeated parameter collapses into a single path(id:) argument filling both positions.
+    @GET("/repeat/\(#p("id", UUID.self))/again/\(#p("id", UUID.self))")
+    @Sendable func repeatedParam(request: Request, context: Context) async throws -> Response {
+        return .init(status: .ok, body: .init(byteBuffer: ByteBuffer(string: "repeated")))
+    }
 }

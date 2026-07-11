@@ -185,6 +185,12 @@ public struct RoutingMacro: ExtensionMacro {
                         let paramName = call.arguments.first?.expression.as(StringLiteralExprSyntax.self)?
                             .segments.first?.as(StringSegmentSyntax.self)?.content.text
                     {
+                        // The name becomes both a `{name}` path placeholder and a `path(name:)` argument
+                        // label, so it must be a plain identifier — reject spaces, braces, slashes, etc.
+                        guard paramName.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil else {
+                            context.diagnose(Diagnostic(node: call, message: MsgParamNameError(name: paramName)))
+                            return nil
+                        }
                         // The second argument is a `Type.self` metatype; take its base as the type name.
                         let typeName: String
                         if
@@ -195,6 +201,12 @@ public struct RoutingMacro: ExtensionMacro {
                             typeName = base.trimmedDescription
                         } else {
                             typeName = call.arguments.dropFirst().first?.expression.trimmedDescription ?? "String"
+                        }
+                        // A repeated parameter collapses into one path(…) argument, so its type must
+                        // agree across occurrences.
+                        if let existing = paramTypes[paramName], existing != typeName {
+                            context.diagnose(Diagnostic(node: call, message: MsgParamTypeConflict(name: paramName, existing: existing, new: typeName)))
+                            return nil
                         }
                         path += "{\(paramName)}"
                         paramTypes[paramName] = typeName
@@ -263,19 +275,35 @@ public struct RoutingMacro: ExtensionMacro {
             let prefixedPath = "\(prefix ?? "")\(route.path)"
 
             for component in prefixedPath.split(separator: "/") {
-                if component.first == "{" {
-                    let name = String(component.dropFirst().dropLast())
+                let comp = String(component)
+                if comp.first == "{", let close = comp.firstIndex(of: "}") {
+                    // `{name}` optionally followed by a literal suffix — Hummingbird's prefix-capture,
+                    // e.g. `{id}.jpg` (param `id`, literal `.jpg`).
+                    let name = String(comp[comp.index(after: comp.startIndex)..<close])
+                    let suffix = String(comp[comp.index(after: close)...])
                     captured.append(name)
-                    out.append("\\(`" + name + "`)")
-                } else if component.first == ":" {
-                    let name = String(component.dropFirst())
+                    out.append("\\(`" + name + "`)" + suffix)
+                } else if comp.last == "}", let open = comp.lastIndex(of: "{"), open != comp.startIndex {
+                    // A literal prefix followed by `{name}` — Hummingbird's suffix-capture, e.g. `file{ext}`.
+                    let prefixLiteral = String(comp[..<open])
+                    let name = String(comp[comp.index(after: open)..<comp.index(before: comp.endIndex)])
+                    captured.append(name)
+                    out.append(prefixLiteral + "\\(`" + name + "`)")
+                } else if comp.first == ":" {
+                    let name = String(comp.dropFirst())
                     captured.append(name)
                     out.append("\\(`" + name + "`)")
                 } else {
-                    // there are other types like wildcards, but those are harder to replace
-                    out.append(component.description)
+                    // literal component, including wildcards (*, **, *.jpg, file.*) which bind no argument
+                    out.append(comp)
                 }
             }
+
+            // A parameter may appear more than once in a path (e.g. `/x/{foo}/y/{foo}`). Those
+            // occurrences collapse into a single path(…) argument that fills every position, so the
+            // signature uses each name once (first-occurrence order) while `out` keeps every position.
+            var seenCapture: Set<String> = []
+            let uniqueCaptured = captured.filter { seenCapture.insert($0).inserted }
 
             // Resolve each captured parameter's declared type, defaulting to String.
             func typeFor(_ param: String) -> String { route.paramTypes[param] ?? "String" }
@@ -290,19 +318,19 @@ public struct RoutingMacro: ExtensionMacro {
                     static let rawPath: String = "\(route.path)"
             """
 
-            if captured.count > 0 {
+            if uniqueCaptured.count > 0 {
                 // for routes that have captured arguments, provide path(…) (formerly resolvedPath(…))
                 code += """
                     @available(*, deprecated, renamed: "path", message: "resolvedPath(…) has been renamed to path(…)")
-                    static func resolvedPath(\(captured.map({ "\($0): \(typeFor($0))"}).joined(separator: ", "))) -> String {
-                        path(\(captured.map({
+                    static func resolvedPath(\(uniqueCaptured.map({ "\($0): \(typeFor($0))"}).joined(separator: ", "))) -> String {
+                        path(\(uniqueCaptured.map({
                             ReservedWord(rawValue: $0) == nil ?
                                 "\($0): \($0)"
                                 :
                                 "`\($0)`: `\($0)`"
                         }).joined(separator: ", ")))
                     }
-                    static func path(\(captured.map({ "\($0): \(typeFor($0))"}).joined(separator: ", "))) -> String {
+                    static func path(\(uniqueCaptured.map({ "\($0): \(typeFor($0))"}).joined(separator: ", "))) -> String {
                         "/\(out.joined(separator: "/"))"
                     }
                 """
