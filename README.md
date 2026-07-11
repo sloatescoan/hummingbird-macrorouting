@@ -1,5 +1,7 @@
 # hummingbird-macrorouting
 
+[![CI](https://github.com/sloatescoan/hummingbird-macrorouting/actions/workflows/ci.yml/badge.svg)](https://github.com/sloatescoan/hummingbird-macrorouting/actions/workflows/ci.yml)
+
 Improved Swift Macro based routing for [Hummingbird](https://hummingbird.codes) controllers.
 
 ## Usage

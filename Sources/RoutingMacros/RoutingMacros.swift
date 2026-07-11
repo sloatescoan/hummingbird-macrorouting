@@ -85,6 +85,15 @@ struct CapturedRoute {
     }
 }
 
+/// Reconstruct the inner text of a string literal, preserving every segment —
+/// including `\(…)` interpolations, which are emitted verbatim (e.g. `\(API.version)`).
+/// Reading only `segments.first` (the old approach) silently dropped everything
+/// after the first interpolation. The reconstructed text is spliced back between
+/// quotes in the generated code, so the Swift compiler evaluates the interpolation.
+private func reconstructedLiteral(_ literal: StringLiteralExprSyntax) -> String {
+    literal.segments.map { $0.description }.joined()
+}
+
 public struct RoutingMacro: ExtensionMacro {
     public static func expansion(
         of node: SwiftSyntax.AttributeSyntax,
@@ -100,7 +109,7 @@ public struct RoutingMacro: ExtensionMacro {
         let prefix: String?
         if let prefixArg = node.arguments?.as(LabeledExprListSyntax.self)?.first {
             if let stringLiteral = prefixArg.expression.as(StringLiteralExprSyntax.self) {
-                prefix = stringLiteral.segments.first?.as(StringSegmentSyntax.self)?.content.text
+                prefix = reconstructedLiteral(stringLiteral)
             } else {
                 prefix = nil
             }
@@ -137,12 +146,19 @@ public struct RoutingMacro: ExtensionMacro {
                     return nil
                 }
 
+                // Preserve any `\(…)` interpolation in the path so it passes
+                // through to the generated code instead of truncating.
+                let path = reconstructedLiteral(firstArg)
+
                 // Extract the route name
                 let name: String
                 if
-                    let nameExpr = arguments.first(where: { $0.label?.text == "name" })?.expression.as(StringLiteralExprSyntax.self),
-                    let nameValue = nameExpr.segments.first?.as(StringSegmentSyntax.self)?.content.text
+                    let nameExpr = arguments.first(where: { $0.label?.text == "name" })?.expression.as(StringLiteralExprSyntax.self)
                 {
+                    // Reconstruct fully: an interpolated name isn't a valid
+                    // identifier, so it should fail the check below rather than
+                    // be truncated to a passing prefix.
+                    let nameValue = reconstructedLiteral(nameExpr)
                     let isValid = nameValue.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil
                     guard isValid else {
                         context.diagnose(
@@ -207,8 +223,13 @@ public struct RoutingMacro: ExtensionMacro {
             }
         }
 
-        // make sure we don't have more than one route with the same name:
+        // make sure we don't have more than one route with the same name.
+        // Diagnose each collision *and* drop the duplicate from codegen (first
+        // occurrence wins) — otherwise we'd emit two `struct <name>` declarations
+        // and the compiler would pile an "invalid redeclaration" error, pointing
+        // into generated code, on top of our clear diagnostic.
         var routeNames: Set<String> = []
+        var uniqueRoutes: [CapturedRoute] = []
         for route in routes {
             if routeNames.contains(route.name) {
                 context.diagnose(
@@ -219,6 +240,7 @@ public struct RoutingMacro: ExtensionMacro {
                 )
             } else {
                 routeNames.insert(route.name)
+                uniqueRoutes.append(route)
             }
         }
 
@@ -227,7 +249,7 @@ public struct RoutingMacro: ExtensionMacro {
             var $routes: RouteCollectionContainer<Context> {
                 let routes = RouteCollection(context: Context.self)
         """
-        for route in routes {
+        for route in uniqueRoutes {
             code += """
                 _ = routes.on(
                     "\(prefix ?? "")\(route.path)",
@@ -245,12 +267,12 @@ public struct RoutingMacro: ExtensionMacro {
             struct $Routing {
                 private init() {}
                 static let $all: [any MacroRoutingRoute.Type] = [
-                    \(routes.map({ "`" + $0.name + "`" + ".self" }).joined(separator: ", "))
+                    \(uniqueRoutes.map({ "`" + $0.name + "`" + ".self" }).joined(separator: ", "))
                 ]
                 static let $prefix: String? = \(prefix == nil ? "nil" : "\"\(prefix!)\"")
         """
 
-        for route in routes {
+        for route in uniqueRoutes {
             var captured: [String] = []
             var out: [String] = []
 
