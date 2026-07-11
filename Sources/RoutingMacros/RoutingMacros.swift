@@ -146,10 +146,6 @@ public struct RoutingMacro: ExtensionMacro {
                     return nil
                 }
 
-                // Preserve any `\(…)` interpolation in the path so it passes
-                // through to the generated code instead of truncating.
-                let path = reconstructedLiteral(firstArg)
-
                 // Extract the route name
                 let name: String
                 if
@@ -174,25 +170,21 @@ public struct RoutingMacro: ExtensionMacro {
                     name = function.name.text
                 }
 
-                // Reconstruct the path from the string literal's segments. Plain text passes through;
-                // each `#param("name", Type.self)` interpolation contributes a `{name}` placeholder
-                // (what Hummingbird sees) and records the Swift type for the synthesized `path(…)`.
+                // Reconstruct the path from the string literal's segments. A `#param("name", Type.self)`
+                // interpolation contributes a `{name}` placeholder (what Hummingbird sees) and records
+                // the Swift type for the synthesized `path(…)`. Every other segment — plain text and any
+                // other `\(…)` interpolation, e.g. `\(API.version)` — is emitted verbatim so it passes
+                // through to the generated code (matching `reconstructedLiteral`).
                 var path = ""
                 var paramTypes: [String: String] = [:]
-                var malformedInterpolation = false
                 for segment in firstArg.segments {
-                    if let str = segment.as(StringSegmentSyntax.self) {
-                        path += str.content.text
-                    } else if let expr = segment.as(ExpressionSegmentSyntax.self) {
-                        guard
-                            let call = expr.expressions.first?.expression.as(MacroExpansionExprSyntax.self),
-                            paramMacroNames.contains(call.macroName.text),
-                            let paramName = call.arguments.first?.expression.as(StringLiteralExprSyntax.self)?
-                                .segments.first?.as(StringSegmentSyntax.self)?.content.text
-                        else {
-                            malformedInterpolation = true
-                            break
-                        }
+                    if
+                        let expr = segment.as(ExpressionSegmentSyntax.self),
+                        let call = expr.expressions.first?.expression.as(MacroExpansionExprSyntax.self),
+                        paramMacroNames.contains(call.macroName.text),
+                        let paramName = call.arguments.first?.expression.as(StringLiteralExprSyntax.self)?
+                            .segments.first?.as(StringSegmentSyntax.self)?.content.text
+                    {
                         // The second argument is a `Type.self` metatype; take its base as the type name.
                         let typeName: String
                         if
@@ -201,22 +193,14 @@ public struct RoutingMacro: ExtensionMacro {
                             let base = typeExpr.base
                         {
                             typeName = base.trimmedDescription
-                        } else if let typeExpr = call.arguments.dropFirst().first?.expression {
-                            typeName = typeExpr.trimmedDescription
                         } else {
-                            malformedInterpolation = true
-                            break
+                            typeName = call.arguments.dropFirst().first?.expression.trimmedDescription ?? "String"
                         }
                         path += "{\(paramName)}"
                         paramTypes[paramName] = typeName
                     } else {
-                        malformedInterpolation = true
-                        break
+                        path += segment.description
                     }
-                }
-                guard !malformedInterpolation else {
-                    context.diagnose(Diagnostic(node: member.decl, message: MsgMalformed()))
-                    return nil
                 }
 
                 return CapturedRoute(method: method, path: path, handler: function.name.text, name: name, function: function, paramTypes: paramTypes)
