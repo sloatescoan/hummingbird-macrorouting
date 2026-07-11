@@ -198,6 +198,79 @@ The argument names are synthesized by MacroRouting, so they're available to well
 
 ![IDE completion of `ApiController.$Routing.logs.path`](https://files.scoat.es/IKYWGNmUCq.gif)
 
+#### Typed path parameters
+
+By default, every synthesized `path(…)` argument is a `String`. You can give an individual parameter a real Swift type with `#p`, right where the parameter appears in the path:
+
+```swift
+    @GET("/users/\(#p("id", UUID.self))")
+    @Sendable func user(request: Request, context: Context) async throws -> Response {
+        …
+    }
+```
+
+`#p("id", UUID.self)` expands to the Hummingbird placeholder `{id}` (so Hummingbird sees the ordinary path `/users/{id}`), while telling MacroRouting that `id` is a `UUID`. `ApiController.$Routing.user.path(id:)` now takes a `UUID`, so you can pass the value directly instead of stringifying at the call site:
+
+```swift
+let path = ApiController.$Routing.user.path(id: someUuid) // -> "/users/00000000-0000-0000-0000-000000000000"
+```
+
+The value's string-interpolation form (its `description`) is used to build the path—for `UUID` that is identical to `.uuidString`. This is the outbound mirror of Hummingbird's inbound `context.parameters.get(_:as:)`.
+
+You can mix typed `#p` slots with ordinary `{…}`/`:…` placeholders, which stay `String`:
+
+```swift
+    @GET("/orgs/\(#p("orgId", UUID.self))/users/\(#p("userId", Int.self))/tag/{tag}")
+    // -> path(orgId: UUID, userId: Int, tag: String)
+```
+
+Any type works, so long as it conforms to `CustomStringConvertible`, *including your own project's types*—just conform them and pass them to `#p`:
+
+```swift
+struct Slug: CustomStringConvertible {
+    let value: String
+    var description: String { value.lowercased() }
+}
+
+// …
+    @GET("/post/\(#p("slug", Slug.self))")
+    // -> path(slug: Slug)
+```
+
+> **Important:** This does *not* affect how Hummingbird interprets a route/path, but it *does* provide a type-safe way to specify a route with `$Routing.pathHandler.path(…)`.
+
+##### The parameter macro's names, and avoiding collisions
+
+`#p` is short and reads well, but `p` is a common identifier. Because the macro is a *freestanding* macro, it lives in your namespace once you `import HummingbirdMacroRouting`, and Swift offers no way to rename a macro at the import site. To avoid a clash, MacroRouting provides the **same** macro under four spellings—use whichever is free in your project:
+
+| Spelling | Notes |
+| --- | --- |
+| `#p` | short; used throughout these docs |
+| `#param` | |
+| `#hbParam` | namespaced-ish |
+| `#HummingbirdMacroRoutingParam` | fully explicit; should be collision-proof |
+
+All four are enabled by default. If a shorter spelling still collides with something in your project, two **package traits** progressively disable the shorter names (which removes both the declaration *and* MacroRouting's recognition of that spelling, so your own same-named macro is left untouched):
+
+| Trait | Available spellings |
+| --- | --- |
+| *(none — default)* | `#p`, `#param`, `#hbParam`, `#HummingbirdMacroRoutingParam` |
+| `LongParamNamesOnly` | `#hbParam`, `#HummingbirdMacroRoutingParam` |
+| `ExplicitParamNameOnly` | `#HummingbirdMacroRoutingParam` |
+
+Enable a trait where you depend on the package:
+
+```swift
+.package(
+    url: "https://github.com/sloatescoan/hummingbird-macrorouting.git",
+    from: "…",
+    traits: ["LongParamNamesOnly"]
+)
+```
+
+You only need to remove (e.g.) `#p` if you already have a `#p` in scope, and if it has a different signature. MacroRouting will always use its own `#p` because the macro expansion code does not get access to your scope. The freestanding macro(s) that MacroRouting uses to resolve path parameters can't be overridden in your code.
+
+
 ## Tests
 
 There's some useful reference code available in the [test suite](https://github.com/sloatescoan/hummingbird-macrorouting/tree/main/Tests).

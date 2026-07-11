@@ -23,3 +23,21 @@ struct MsgNameError: DiagnosticMessage {
         self.message = "The name associated with this route ('\(name)') must be a valid Swift identifier"
     }
 }
+
+struct MsgParamNameError: DiagnosticMessage {
+    let diagnosticID = MessageID(domain: "MacroRouting", id: "paramNameError")
+    let severity: DiagnosticSeverity = .error
+    let message: String
+    init(name: String) {
+        self.message = "The parameter name '\(name)' can't contain '/', '{', '}', a backtick or backslash, and can't be empty or all-whitespace (it becomes both a path placeholder and a path(…) argument label)"
+    }
+}
+
+struct MsgParamTypeConflict: DiagnosticMessage {
+    let diagnosticID = MessageID(domain: "MacroRouting", id: "paramTypeConflict")
+    let severity: DiagnosticSeverity = .error
+    let message: String
+    init(name: String, existing: String, new: String) {
+        self.message = "Path parameter '\(name)' is declared with conflicting types ('\(existing)' and '\(new)'); repeated parameters collapse into a single path(…) argument and must agree on their type"
+    }
+}

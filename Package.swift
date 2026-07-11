@@ -9,6 +9,14 @@ let package = Package(
     products: [
         .library(name: "HummingbirdMacroRouting", targets: ["HummingbirdMacroRouting"]),
     ],
+    // Opt-in traits that progressively restrict which spellings of the path-parameter macro are
+    // available, for consumers that need to avoid a name collision. All names are on by default.
+    //   LongParamNamesOnly   – disables #p and #param (leaves #hbParam, #HummingbirdMacroRoutingParam)
+    //   ExplicitParamNameOnly – leaves only #HummingbirdMacroRoutingParam
+    traits: [
+        "LongParamNamesOnly",
+        "ExplicitParamNameOnly",
+    ],
     dependencies: [
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.1"),

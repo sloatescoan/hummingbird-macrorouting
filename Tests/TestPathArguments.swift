@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import Hummingbird
 import HummingbirdMacroRouting
@@ -46,9 +47,66 @@ struct MacroRoutingTestPathArguments {
         #expect(
             Controller.$Routing.mixed.path(
                 one: "apple", two: "banana", three: "carrot",
-                four: "durian", five: "eggplant" 
+                four: "durian", five: "eggplant"
             ) == "/mixed/apple/banana/carrot/durian/eggplant"
         )
     }
-    
+
+    @Test("Typed Parameters")
+    func testTypedParameters() {
+        // Single UUID parameter — interpolation matches .uuidString.
+        let id = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+        #expect(
+            Controller.$Routing.user.path(id: id) == "/user/E621E1F8-C36C-495A-93FC-0C247A3E6E5F"
+        )
+
+        // Mixed types: UUID + Int, with an untyped (String) parameter defaulting through.
+        #expect(
+            Controller.$Routing.orgUser.path(orgId: id, userId: 42, tag: "featured")
+                == "/org/E621E1F8-C36C-495A-93FC-0C247A3E6E5F/user/42/tag/featured"
+        )
+
+        // Project-defined CustomStringConvertible type.
+        #expect(
+            Controller.$Routing.post.path(slug: Slug(value: "Hello-World")) == "/post/hello-world"
+        )
+    }
+
+    @Test("Parameter Macro Aliases")
+    func testParameterMacroAliases() {
+        // All four spellings resolve to the same ParamMacro and produce a typed path(id: UUID).
+        let id = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+        #expect(Controller.$Routing.aliasParam.path(id: id) == "/alias/param/E621E1F8-C36C-495A-93FC-0C247A3E6E5F")
+        #expect(Controller.$Routing.aliasHbParam.path(id: id) == "/alias/hb/E621E1F8-C36C-495A-93FC-0C247A3E6E5F")
+        #expect(Controller.$Routing.aliasExplicitParam.path(id: id) == "/alias/explicit/E621E1F8-C36C-495A-93FC-0C247A3E6E5F")
+    }
+
+    @Test("Partial and Suffix Captures")
+    func testPartialCaptures() {
+        let id = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+        // prefix-capture {id}.jpg — literal suffix preserved.
+        #expect(Controller.$Routing.image.path(id: id) == "/img/E621E1F8-C36C-495A-93FC-0C247A3E6E5F.jpg")
+        // suffix-capture file{ext} — literal prefix preserved.
+        #expect(Controller.$Routing.download.path(ext: ".json") == "/download/file.json")
+        // reserved-word parameter name, backticked in the generated body.
+        #expect(Controller.$Routing.keyword.path(default: "x") == "/kw/x")
+    }
+
+    @Test("Repeated Parameter Collapses")
+    func testRepeatedParameter() {
+        // One `id:` argument fills every occurrence in the path.
+        let id = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+        #expect(
+            Controller.$Routing.repeatedParam.path(id: id)
+                == "/repeat/E621E1F8-C36C-495A-93FC-0C247A3E6E5F/again/E621E1F8-C36C-495A-93FC-0C247A3E6E5F"
+        )
+    }
+
+    @Test("Loose Parameter Names")
+    func testLooseNames() {
+        // Names Hummingbird allows but that aren't plain identifiers work via raw (backticked) labels.
+        #expect(Controller.$Routing.spacedName.path(`user id`: "abc") == "/space/abc")
+        #expect(Controller.$Routing.dashedName.path(`user-id`: "abc") == "/dash/abc")
+    }
+
 }

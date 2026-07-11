@@ -14,11 +14,70 @@ struct RoutingMacros: CompilerPlugin {
         HEADMacro.self,
         PATCHMacro.self,
         RoutingMacro.self,
+        ParamMacro.self,
     ]
+}
+
+// Freestanding expression macro used inside a route path: `\(#param("id", UUID.self))`.
+// It expands to the string literal "{id}" so the surrounding path type-checks as a String and
+// its runtime value is the Hummingbird placeholder. RoutingMacro reads the (unexpanded) call
+// out of the path's syntax to recover both the parameter name and its Swift type.
+public struct ParamMacro: ExpressionMacro {
+    public static func expansion(
+        of node: some FreestandingMacroExpansionSyntax,
+        in context: some MacroExpansionContext
+    ) throws -> ExprSyntax {
+        guard
+            let name = node.arguments.first?.expression.as(StringLiteralExprSyntax.self)?
+                .segments.first?.as(StringSegmentSyntax.self)?.content.text
+        else {
+            return "\"{}\""
+        }
+        return "\"{\(raw: name)}\""
+    }
 }
 enum Method: String, CaseIterable {
     case get, post, put, delete, head, patch
     static var allValues: [String] { Self.allCases.map { "\($0)".uppercased() } }
+}
+
+// The spellings RoutingMacro recognizes as the path-parameter macro. Gated by the same package
+// traits that gate the declarations, so a disabled name is no longer claimed as ours.
+let paramMacroNames: Set<String> = {
+    var names: Set<String> = ["HummingbirdMacroRoutingParam"]
+    #if !ExplicitParamNameOnly
+    names.insert("hbParam")
+    #endif
+    #if !ExplicitParamNameOnly && !LongParamNamesOnly
+    names.insert("p")
+    names.insert("param")
+    #endif
+    return names
+}()
+
+// Is `name` usable as a *bare* Swift identifier (no backticks needed)? Approximates Swift's
+// identifier grammar and covers Unicode letters; keywords also satisfy this by their characters.
+func isBareIdentifier(_ name: String) -> Bool {
+    guard let first = name.first, first == "_" || first.isLetter else { return false }
+    return name.dropFirst().allSatisfy { $0 == "_" || $0.isLetter || $0.isNumber }
+}
+
+// A path parameter name may be anything Hummingbird accepts, except characters that would break the
+// route path structure (`{`, `}`, `/`) or the generated Swift / string literals (backtick, backslash,
+// newlines). It also may not be empty or all-whitespace.
+func isValidParamName(_ name: String) -> Bool {
+    guard name.contains(where: { !$0.isWhitespace }) else { return false }
+    return !name.contains { "{}/`\\".contains($0) || $0.isNewline }
+}
+
+// Emit `name` as an argument *label*: bare when it's already a valid identifier (keywords are legal
+// bare labels too), backticked otherwise (raw identifiers — spaces, hyphens, digit-leads, …).
+func labelToken(_ name: String) -> String { isBareIdentifier(name) ? name : "`\(name)`" }
+
+// Emit `name` as a *value* reference: bare only for a plain identifier; keywords and raw identifiers
+// must be backticked to be referenced as an expression.
+func valueToken(_ name: String) -> String {
+    (isBareIdentifier(name) && ReservedWord(rawValue: name) == nil) ? name : "`\(name)`"
 }
 
 struct CapturedRoute {
@@ -27,6 +86,8 @@ struct CapturedRoute {
     let handler: String
     let name: String
     let function: FunctionDeclSyntax
+    // param name -> explicit Swift type from a `#param(…)` in the path (defaults to String when absent)
+    let paramTypes: [String: String]
 
     static func stripped(_ val: String) -> String {
         var val = val
@@ -39,12 +100,13 @@ struct CapturedRoute {
         return val
     }
 
-    init(method: Method, path: String, handler: String, name: String, function: FunctionDeclSyntax) {
+    init(method: Method, path: String, handler: String, name: String, function: FunctionDeclSyntax, paramTypes: [String: String] = [:]) {
         self.method = method
         self.path = Self.stripped(path)
         self.handler = Self.stripped(handler)
         self.name = Self.stripped(name)
         self.function = function
+        self.paramTypes = paramTypes
     }
 }
 
@@ -109,10 +171,6 @@ public struct RoutingMacro: ExtensionMacro {
                     return nil
                 }
 
-                // Preserve any `\(…)` interpolation in the path so it passes
-                // through to the generated code instead of truncating.
-                let path = reconstructedLiteral(firstArg)
-
                 // Extract the route name
                 let name: String
                 if
@@ -137,8 +195,53 @@ public struct RoutingMacro: ExtensionMacro {
                     name = function.name.text
                 }
 
+                // Reconstruct the path from the string literal's segments. A `#param("name", Type.self)`
+                // interpolation contributes a `{name}` placeholder (what Hummingbird sees) and records
+                // the Swift type for the synthesized `path(…)`. Every other segment — plain text and any
+                // other `\(…)` interpolation, e.g. `\(API.version)` — is emitted verbatim so it passes
+                // through to the generated code (matching `reconstructedLiteral`).
+                var path = ""
+                var paramTypes: [String: String] = [:]
+                for segment in firstArg.segments {
+                    if
+                        let expr = segment.as(ExpressionSegmentSyntax.self),
+                        let call = expr.expressions.first?.expression.as(MacroExpansionExprSyntax.self),
+                        paramMacroNames.contains(call.macroName.text),
+                        let paramName = call.arguments.first?.expression.as(StringLiteralExprSyntax.self)?
+                            .segments.first?.as(StringSegmentSyntax.self)?.content.text
+                    {
+                        // The name becomes both a `{name}` placeholder and a `path(name:)` argument
+                        // label. We allow anything Hummingbird does, except characters that break the
+                        // path structure or the generated code (see isValidParamName).
+                        guard isValidParamName(paramName) else {
+                            context.diagnose(Diagnostic(node: call, message: MsgParamNameError(name: paramName)))
+                            return nil
+                        }
+                        // The second argument is a `Type.self` metatype; take its base as the type name.
+                        let typeName: String
+                        if
+                            let typeExpr = call.arguments.dropFirst().first?.expression.as(MemberAccessExprSyntax.self),
+                            typeExpr.declName.baseName.text == "self",
+                            let base = typeExpr.base
+                        {
+                            typeName = base.trimmedDescription
+                        } else {
+                            typeName = call.arguments.dropFirst().first?.expression.trimmedDescription ?? "String"
+                        }
+                        // A repeated parameter collapses into one path(…) argument, so its type must
+                        // agree across occurrences.
+                        if let existing = paramTypes[paramName], existing != typeName {
+                            context.diagnose(Diagnostic(node: call, message: MsgParamTypeConflict(name: paramName, existing: existing, new: typeName)))
+                            return nil
+                        }
+                        path += "{\(paramName)}"
+                        paramTypes[paramName] = typeName
+                    } else {
+                        path += segment.description
+                    }
+                }
 
-                return CapturedRoute(method: method, path: path, handler: function.name.text, name: name, function: function)
+                return CapturedRoute(method: method, path: path, handler: function.name.text, name: name, function: function, paramTypes: paramTypes)
             }
         }
 
@@ -198,19 +301,38 @@ public struct RoutingMacro: ExtensionMacro {
             let prefixedPath = "\(prefix ?? "")\(route.path)"
 
             for component in prefixedPath.split(separator: "/") {
-                if component.first == "{" {
-                    let name = String(component.dropFirst().dropLast())
+                let comp = String(component)
+                if comp.first == "{", let close = comp.firstIndex(of: "}") {
+                    // `{name}` optionally followed by a literal suffix — Hummingbird's prefix-capture,
+                    // e.g. `{id}.jpg` (param `id`, literal `.jpg`).
+                    let name = String(comp[comp.index(after: comp.startIndex)..<close])
+                    let suffix = String(comp[comp.index(after: close)...])
                     captured.append(name)
-                    out.append("\\(`" + name + "`)")
-                } else if component.first == ":" {
-                    let name = String(component.dropFirst())
+                    out.append("\\(" + valueToken(name) + ")" + suffix)
+                } else if comp.last == "}", let open = comp.lastIndex(of: "{"), open != comp.startIndex {
+                    // A literal prefix followed by `{name}` — Hummingbird's suffix-capture, e.g. `file{ext}`.
+                    let prefixLiteral = String(comp[..<open])
+                    let name = String(comp[comp.index(after: open)..<comp.index(before: comp.endIndex)])
                     captured.append(name)
-                    out.append("\\(`" + name + "`)")
+                    out.append(prefixLiteral + "\\(" + valueToken(name) + ")")
+                } else if comp.first == ":" {
+                    let name = String(comp.dropFirst())
+                    captured.append(name)
+                    out.append("\\(" + valueToken(name) + ")")
                 } else {
-                    // there are other types like wildcards, but those are harder to replace
-                    out.append(component.description)
+                    // literal component, including wildcards (*, **, *.jpg, file.*) which bind no argument
+                    out.append(comp)
                 }
             }
+
+            // A parameter may appear more than once in a path (e.g. `/x/{foo}/y/{foo}`). Those
+            // occurrences collapse into a single path(…) argument that fills every position, so the
+            // signature uses each name once (first-occurrence order) while `out` keeps every position.
+            var seenCapture: Set<String> = []
+            let uniqueCaptured = captured.filter { seenCapture.insert($0).inserted }
+
+            // Resolve each captured parameter's declared type, defaulting to String.
+            func typeFor(_ param: String) -> String { route.paramTypes[param] ?? "String" }
 
             code += """
                 struct `\(route.name)`: MacroRoutingRoute {
@@ -222,19 +344,14 @@ public struct RoutingMacro: ExtensionMacro {
                     static let rawPath: String = "\(route.path)"
             """
 
-            if captured.count > 0 {
+            if uniqueCaptured.count > 0 {
                 // for routes that have captured arguments, provide path(…) (formerly resolvedPath(…))
                 code += """
                     @available(*, deprecated, renamed: "path", message: "resolvedPath(…) has been renamed to path(…)")
-                    static func resolvedPath(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
-                        path(\(captured.map({
-                            ReservedWord(rawValue: $0) == nil ?
-                                "\($0): \($0)"
-                                :
-                                "`\($0)`: `\($0)`"
-                        }).joined(separator: ", ")))
+                    static func resolvedPath(\(uniqueCaptured.map({ "\(labelToken($0)): \(typeFor($0))"}).joined(separator: ", "))) -> String {
+                        path(\(uniqueCaptured.map({ "\(labelToken($0)): \(valueToken($0))" }).joined(separator: ", ")))
                     }
-                    static func path(\(captured.map({ "\($0): String"}).joined(separator: ", "))) -> String {
+                    static func path(\(uniqueCaptured.map({ "\(labelToken($0)): \(typeFor($0))"}).joined(separator: ", "))) -> String {
                         "/\(out.joined(separator: "/"))"
                     }
                 """
