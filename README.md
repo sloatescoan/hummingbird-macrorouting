@@ -198,6 +198,56 @@ The argument names are synthesized by MacroRouting, so they're available to well
 
 ![IDE completion of `ApiController.$Routing.logs.path`](https://files.scoat.es/IKYWGNmUCq.gif)
 
+## Controller Extensions
+
+Swift doesn't allow extension macros (like `@MacroRouting`, which has the `extension` macro role from [SE-0402](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0402-extension-macros.md)) to be attached to an `extension`, and macro expansions can't see across declarations. So routes declared in an extension of a controller use a companion macro, `@MacroRoutingExtension`, with a *namespace* that you declare once on the base controller:
+
+```swift
+@MacroRouting(extensions: ["admin"])
+struct UserController {
+    typealias Context = AppRequestContext
+
+    @GET("/main")
+    @Sendable func getMain(request: Request, context: Context) async throws -> Response {
+        …
+    }
+}
+
+@MacroRoutingExtension("admin")
+extension UserController {
+    @POST("/logout")
+    @Sendable func logOutHandler(request: Request, context: Context) async throws -> Response {
+        …
+    }
+}
+```
+
+Wiring is unchanged — one call, and the extension's routes are included automatically:
+
+```swift
+router.addRoutes(UserController().$routes)
+```
+
+Static route lookup works for extension routes too, namespaced under `$Routing`:
+
+```swift
+UserController.$Routing.getMain.path              // "/main"
+UserController.$Routing.$admin.logOutHandler.path // "/logout"
+UserController.$Routing.$all                      // complete: base + extension routes
+```
+
+You can declare as many namespaces (and matching extensions) as you like. Both directions are checked at compile time:
+
+- Declaring `extensions: ["admin"]` without a matching `@MacroRoutingExtension("admin")` fails with `type 'UserController' has no member '$adminRoutes'`.
+- Writing `@MacroRoutingExtension("admin")` without declaring `"admin"` on the base fails with `cannot find type '$admin_is_listed_in_MacroRouting_extensions' in scope`.
+
+So a forgotten declaration can never silently drop routes.
+
+Notes:
+
+- Namespaces must be valid Swift identifiers; `routes` and `Routing` are reserved.
+- The base `prefix:` does **not** cascade into extensions (each expansion is sandboxed, and static `path` values must match runtime paths). Extensions take their own prefix: `@MacroRoutingExtension("admin", prefix: "/admin")`.
+
 ## Tests
 
 There's some useful reference code available in the [test suite](https://github.com/sloatescoan/hummingbird-macrorouting/tree/main/Tests).
