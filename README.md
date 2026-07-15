@@ -213,6 +213,7 @@ struct UserController {
     }
 }
 
+// this extension might be in a different file
 @MacroRoutingExtension("admin")
 extension UserController {
     @POST("/logout")
