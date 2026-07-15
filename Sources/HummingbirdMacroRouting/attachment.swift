@@ -1,5 +1,13 @@
 @attached(extension, names: arbitrary)
-public macro MacroRouting(prefix: String? = nil) = #externalMacro(module: "RoutingMacros", type: "RoutingMacro")
+public macro MacroRouting(prefix: String? = nil, extensions: [String] = []) = #externalMacro(module: "RoutingMacros", type: "RoutingMacro")
+
+// Extension-role macros can't be attached to an `extension`, so routes declared in
+// extensions of a controller use this member-role macro instead. Each extension gets
+// a namespace, declared once on the base: @MacroRouting(extensions: ["admin"]).
+// The base then wires `$adminRoutes` into `$routes` and exposes the extension's
+// route structs as `$Routing.$admin` — both directions are compile-checked.
+@attached(member, names: arbitrary)
+public macro MacroRoutingExtension(_ namespace: String, prefix: String? = nil) = #externalMacro(module: "RoutingMacros", type: "RoutingExtensionMacro")
 
 @attached(peer, names: arbitrary)
 public macro GET(_ path: String, name: String? = nil) = #externalMacro(module: "RoutingMacros", type: "GETMacro")
